@@ -24,8 +24,11 @@ jobs:
     - name: 设置Android SDK
       uses: android-actions/setup-android@v3
       with:
-        api-level: 29
-        build-tools: 29.0.3
+        cmdline-tools-version: 8512546
+        packages: |
+          platform-tools
+          platforms;android-29
+          build-tools;29.0.3
     
     - name: 缓存Gradle依赖
       uses: actions/cache@v4
