@@ -6,6 +6,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import androidx.core.content.ContextCompat;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.AsyncTask;
@@ -103,8 +105,13 @@ public class CameraDetector {
         
         listener.onScanProgress("扫描WiFi网络中的摄像头...");
         
-        // 开始WiFi扫描
-        wifiManager.startScan();
+        // 开始WiFi扫描（需要CHANGE_WIFI_STATE权限）
+        try {
+            wifiManager.startScan();
+        } catch (SecurityException e) {
+            Log.e(TAG, "WiFi扫描权限不足", e);
+            listener.onScanProgress("WiFi扫描权限不足，使用缓存结果");
+        }
         
         // 获取扫描结果
         List<ScanResult> scanResults = wifiManager.getScanResults();
