@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
 
 /**
  * 增强版摄像头检测器 - 检测周围的各种摄像头设备
- * 包括网络摄像头、蓝牙摄像头、WiFi摄像头、隐藏摄像头等
+ * 包括网络摄像头、蓝牙摄像头、WiFi摄像头等
  */
 public class CameraDetector {
     
@@ -185,45 +185,6 @@ public class CameraDetector {
                         "HOST: 239.255.255.250:1900\r\n" +
                         "MAN: \"ssdp:discover\"\r\n" +
                         "ST: upnp:rootdevice\r\n" +
-                        "MX: 3\r\n\r\n";
-                
-                DatagramSocket socket = new DatagramSocket();
-                DatagramPacket packet = new DatagramPacket(
-                        ssdpMsg.getBytes(),
-                        ssdpMsg.length(),
-                        InetAddress.getByName("239.255.255.250"),
-                        1900
-                );
-                
-                socket.send(packet);
-                
-                // 监听响应
-                byte[] buffer = new byte[1024];
-                DatagramPacket response = new DatagramPacket(buffer, buffer.length);
-                
-                socket.setSoTimeout(5000); // 5秒超时
-                
-                try {
-                    while (true) {
-                        socket.receive(response);
-                        String responseStr = new String(response.getData(), 0, response.getLength());
-                        
-                        if (isUPnPCameraDevice(responseStr)) {
-                            CameraInfo cameraInfo = createUPnPCameraInfo(response.getAddress().getHostAddress(), responseStr);
-                            listener.onCameraDetected(cameraInfo);
-                        }
-                    }
-                } catch (IOException e) {
-                    // 超时或其他错误，结束监听
-                }
-                
-                socket.close();
-                
-            } catch (Exception e) {
-                Log.e(TAG, "UPnP扫描失败", e);
-            }
-        });
-    }
                         "MX: 3\r\n\r\n";
                 
                 DatagramSocket socket = new DatagramSocket();

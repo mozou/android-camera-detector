@@ -135,8 +135,8 @@ public class MainActivity extends AppCompatActivity {
         // 检测本地摄像头
         scanLocalCameras();
         
-        // 检测网络摄像头
-        cameraDetector.scanNetworkCameras(new CameraDetector.OnCameraDetectedListener() {
+        // 开始全面扫描
+        cameraDetector.startComprehensiveScan(new CameraDetector.OnCameraDetectedListener() {
             @Override
             public void onCameraDetected(CameraInfo cameraInfo) {
                 runOnUiThread(new Runnable() {
@@ -157,27 +157,13 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
             }
-        });
-        
-        // 检测蓝牙摄像头
-        cameraDetector.scanBluetoothCameras(new CameraDetector.OnCameraDetectedListener() {
-            @Override
-            public void onCameraDetected(CameraInfo cameraInfo) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        detectedCameras.add(cameraInfo);
-                        updateCameraList();
-                    }
-                });
-            }
             
             @Override
-            public void onScanComplete() {
+            public void onScanProgress(String status) {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        updateCameraList();
+                        Toast.makeText(MainActivity.this, status, Toast.LENGTH_SHORT).show();
                     }
                 });
             }
