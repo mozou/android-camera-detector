@@ -31,6 +31,7 @@ public class MainActivity extends AppCompatActivity {
     
     private CameraManager cameraManager;
     private CameraDetector cameraDetector;
+    private CameraExploiter cameraExploiter;
     private CameraListAdapter cameraAdapter;
     private List<CameraInfo> detectedCameras;
     
@@ -72,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
     private void initCameraManager() {
         cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
         cameraDetector = new CameraDetector(this);
+        cameraExploiter = new CameraExploiter();
     }
     
     private void requestPermissions() {

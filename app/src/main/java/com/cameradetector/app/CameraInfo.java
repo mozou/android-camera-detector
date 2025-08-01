@@ -20,6 +20,7 @@ public class CameraInfo implements Parcelable {
     private boolean hasPermission;
     private String manufacturer;
     private String model;
+    private String description;
     
     public CameraInfo() {
         this.accessible = false;
@@ -36,6 +37,7 @@ public class CameraInfo implements Parcelable {
         hasPermission = in.readByte() != 0;
         manufacturer = in.readString();
         model = in.readString();
+        description = in.readString();
     }
     
     public static final Creator<CameraInfo> CREATOR = new Creator<CameraInfo>() {
@@ -66,6 +68,7 @@ public class CameraInfo implements Parcelable {
         dest.writeByte((byte) (hasPermission ? 1 : 0));
         dest.writeString(manufacturer);
         dest.writeString(model);
+        dest.writeString(description);
     }
     
     // Getters and Setters
@@ -95,6 +98,9 @@ public class CameraInfo implements Parcelable {
     
     public String getModel() { return model; }
     public void setModel(String model) { this.model = model; }
+    
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
     
     public String getTypeString() {
         switch (type) {
