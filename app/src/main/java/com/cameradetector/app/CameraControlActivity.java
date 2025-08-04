@@ -236,17 +236,125 @@ public class CameraControlActivity extends AppCompatActivity {
     private void testCameraAccess() {
         if (selectedCamera == null) return;
         
-        boolean hasAccess = cameraController.testCameraAccess(selectedCamera);
+        // Show progress dialog
+        AlertDialog progressDialog = new AlertDialog.Builder(this)
+            .setTitle("Testing Camera Access")
+            .setMessage("Testing access to " + selectedCamera.getName() + "...")
+            .setCancelable(false)
+            .create();
+        progressDialog.show();
         
-        String message = hasAccess ? 
-            "摄像头 " + selectedCamera.getName() + " 可以正常访问" :
-            "摄像头 " + selectedCamera.getName() + " 无法访问";
+        // Run test in background thread
+        new Thread(() -> {
+            final boolean hasAccess = cameraController.testCameraAccess(selectedCamera);
+            final boolean hasPermission = selectedCamera.hasPermission();
             
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+            // Update UI on main thread
+            runOnUiThread(() -> {
+                progressDialog.dismiss();
+                
+                String accessStatus = hasAccess ? "accessible" : "not accessible";
+                String permissionStatus = hasPermission ? "has permission" : "no permission";
+                
+                String message = "Camera " + selectedCamera.getName() + " is " + 
+                               accessStatus + " and " + permissionStatus;
+                
+                // Show detailed dialog with results
+                new AlertDialog.Builder(this)
+                    .setTitle("Camera Access Test Results")
+                    .setMessage(message)
+                    .setPositiveButton("OK", null)
+                    .setNeutralButton(hasAccess && !hasPermission ? "Request Permission" : null, 
+                        (dialog, which) -> requestCameraPermission())
+                    .show();
+                
+                // Update camera status in UI
+                adapter.notifyDataSetChanged();
+                updateSelectedCameraInfo();
+            });
+        }).start();
+    }
+    
+    private void requestCameraPermission() {
+        if (selectedCamera == null) return;
         
-        // 更新摄像头状态
-        selectedCamera.setAccessible(hasAccess);
-        adapter.notifyDataSetChanged();
-        updateSelectedCameraInfo();
+        // Show progress dialog
+        AlertDialog progressDialog = new AlertDialog.Builder(this)
+            .setTitle("Requesting Permission")
+            .setMessage("Attempting to get permission for " + selectedCamera.getName() + "...")
+            .setCancelable(false)
+            .create();
+        progressDialog.show();
+        
+        // Run in background thread
+        new Thread(() -> {
+            final boolean success = cameraController.requestCameraPermission(selectedCamera);
+            
+            // Update UI on main thread
+            runOnUiThread(() -> {
+                progressDialog.dismiss();
+                
+                if (success) {
+                    Toast.makeText(this, "Permission granted for " + selectedCamera.getName(), 
+                                 Toast.LENGTH_SHORT).show();
+                } else {
+                    // For local cameras or when permission requires user interaction
+                    if (selectedCamera.getType() == CameraInfo.CameraType.LOCAL) {
+                        new AlertDialog.Builder(this)
+                            .setTitle("Permission Required")
+                            .setMessage("This app needs camera permission to control the device. " +
+                                      "Please grant the permission in Settings.")
+                            .setPositiveButton("Open Settings", (dialog, which) -> 
+                                cameraController.openAppPermissionSettings())
+                            .setNegativeButton("Cancel", null)
+                            .show();
+                    } 
+                    // For network cameras that need authentication
+                    else if (selectedCamera.getType() == CameraInfo.CameraType.NETWORK) {
+                        showNetworkCameraLoginDialog();
+                    }
+                    // For Bluetooth cameras that need pairing
+                    else if (selectedCamera.getType() == CameraInfo.CameraType.BLUETOOTH) {
+                        Toast.makeText(this, "Please pair with this device in Bluetooth settings", 
+                                     Toast.LENGTH_LONG).show();
+                    }
+                }
+                
+                // Update camera status in UI
+                adapter.notifyDataSetChanged();
+                updateSelectedCameraInfo();
+            });
+        }).start();
+    }
+    
+    private void showNetworkCameraLoginDialog() {
+        // Create dialog with username/password fields
+        final android.view.View dialogView = getLayoutInflater().inflate(
+            android.R.layout.simple_list_item_2, null);
+        
+        final android.widget.TextView usernameView = dialogView.findViewById(android.R.id.text1);
+        final android.widget.TextView passwordView = dialogView.findViewById(android.R.id.text2);
+        
+        usernameView.setHint("Username (default: admin)");
+        passwordView.setHint("Password (default: admin)");
+        
+        new AlertDialog.Builder(this)
+            .setTitle("Camera Login")
+            .setMessage("Enter credentials for " + selectedCamera.getName())
+            .setView(dialogView)
+            .setPositiveButton("Login", (dialog, which) -> {
+                String username = usernameView.getText().toString();
+                String password = passwordView.getText().toString();
+                
+                // Use default values if empty
+                if (username.isEmpty()) username = "admin";
+                if (password.isEmpty()) password = "admin";
+                
+                // TODO: Implement network camera authentication with these credentials
+                Toast.makeText(this, "Login attempted with " + username, 
+                             Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 }

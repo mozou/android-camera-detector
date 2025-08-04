@@ -77,32 +77,70 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void requestPermissions() {
-        String[] permissions = {
-            Manifest.permission.CAMERA,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.BLUETOOTH,
-            Manifest.permission.BLUETOOTH_ADMIN,
-            Manifest.permission.INTERNET,
-            Manifest.permission.ACCESS_NETWORK_STATE,
-            Manifest.permission.ACCESS_WIFI_STATE,
-            Manifest.permission.CHANGE_WIFI_STATE
-        };
+        // Create separate permission groups for better user experience
+        List<String> basicPermissions = new ArrayList<>();
+        List<String> locationPermissions = new ArrayList<>();
+        List<String> bluetoothPermissions = new ArrayList<>();
         
-        List<String> permissionsToRequest = new ArrayList<>();
-        for (String permission : permissions) {
-            if (ContextCompat.checkSelfPermission(this, permission) 
-                != PackageManager.PERMISSION_GRANTED) {
-                permissionsToRequest.add(permission);
+        // Basic permissions
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            basicPermissions.add(Manifest.permission.CAMERA);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) != PackageManager.PERMISSION_GRANTED) {
+            basicPermissions.add(Manifest.permission.INTERNET);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_NETWORK_STATE) != PackageManager.PERMISSION_GRANTED) {
+            basicPermissions.add(Manifest.permission.ACCESS_NETWORK_STATE);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
+            basicPermissions.add(Manifest.permission.ACCESS_WIFI_STATE);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CHANGE_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
+            basicPermissions.add(Manifest.permission.CHANGE_WIFI_STATE);
+        }
+        
+        // Location permissions
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            locationPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            locationPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+        }
+        
+        // Bluetooth permissions with Android version check
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            // Android 12+ specific Bluetooth permissions
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                bluetoothPermissions.add(Manifest.permission.BLUETOOTH_SCAN);
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                bluetoothPermissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+            }
+        } else {
+            // Older Android versions
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
+                bluetoothPermissions.add(Manifest.permission.BLUETOOTH);
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+                bluetoothPermissions.add(Manifest.permission.BLUETOOTH_ADMIN);
             }
         }
         
-        if (!permissionsToRequest.isEmpty()) {
+        // Request permissions in sequence for better user experience
+        if (!basicPermissions.isEmpty()) {
             ActivityCompat.requestPermissions(this, 
-                permissionsToRequest.toArray(new String[0]), 
+                basicPermissions.toArray(new String[0]), 
                 PERMISSION_REQUEST_CODE);
+        } else if (!locationPermissions.isEmpty()) {
+            ActivityCompat.requestPermissions(this, 
+                locationPermissions.toArray(new String[0]), 
+                PERMISSION_REQUEST_CODE + 1);
+        } else if (!bluetoothPermissions.isEmpty()) {
+            ActivityCompat.requestPermissions(this, 
+                bluetoothPermissions.toArray(new String[0]), 
+                PERMISSION_REQUEST_CODE + 2);
         } else {
-            // 权限已获取，可以开始扫描
+            // All permissions granted, start scanning
             scanForCameras();
         }
     }
@@ -112,7 +150,7 @@ public class MainActivity extends AppCompatActivity {
                                          @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         
-        if (requestCode == PERMISSION_REQUEST_CODE) {
+        if (requestCode >= PERMISSION_REQUEST_CODE && requestCode <= PERMISSION_REQUEST_CODE + 2) {
             boolean allPermissionsGranted = true;
             for (int result : grantResults) {
                 if (result != PackageManager.PERMISSION_GRANTED) {
@@ -122,10 +160,71 @@ public class MainActivity extends AppCompatActivity {
             }
             
             if (allPermissionsGranted) {
+                // Continue with permission sequence
+                if (requestCode == PERMISSION_REQUEST_CODE) {
+                    // Basic permissions granted, request location
+                    List<String> locationPermissions = new ArrayList<>();
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                        locationPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
+                    }
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                        locationPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
+                    }
+                    
+                    if (!locationPermissions.isEmpty()) {
+                        ActivityCompat.requestPermissions(this, 
+                            locationPermissions.toArray(new String[0]), 
+                            PERMISSION_REQUEST_CODE + 1);
+                        return;
+                    }
+                }
+                
+                if (requestCode == PERMISSION_REQUEST_CODE || requestCode == PERMISSION_REQUEST_CODE + 1) {
+                    // Location permissions granted, request bluetooth
+                    List<String> bluetoothPermissions = new ArrayList<>();
+                    
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                            bluetoothPermissions.add(Manifest.permission.BLUETOOTH_SCAN);
+                        }
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                            bluetoothPermissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+                        }
+                    } else {
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
+                            bluetoothPermissions.add(Manifest.permission.BLUETOOTH);
+                        }
+                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+                            bluetoothPermissions.add(Manifest.permission.BLUETOOTH_ADMIN);
+                        }
+                    }
+                    
+                    if (!bluetoothPermissions.isEmpty()) {
+                        ActivityCompat.requestPermissions(this, 
+                            bluetoothPermissions.toArray(new String[0]), 
+                            PERMISSION_REQUEST_CODE + 2);
+                        return;
+                    }
+                }
+                
+                // All permission sequences completed
                 Toast.makeText(this, "权限已获取，开始扫描摄像头", Toast.LENGTH_SHORT).show();
                 scanForCameras();
             } else {
-                Toast.makeText(this, "需要权限才能检测摄像头设备", Toast.LENGTH_LONG).show();
+                // Some permissions were denied
+                if (requestCode == PERMISSION_REQUEST_CODE) {
+                    // Basic permissions denied - critical, show explanation
+                    new androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("需要基本权限")
+                        .setMessage("摄像头和网络权限是应用程序正常工作所必需的。请授予这些权限以继续。")
+                        .setPositiveButton("重试", (dialog, which) -> requestPermissions())
+                        .setNegativeButton("取消", (dialog, which) -> Toast.makeText(this, "应用功能将受限", Toast.LENGTH_LONG).show())
+                        .show();
+                } else {
+                    // Non-critical permissions, continue with limited functionality
+                    Toast.makeText(this, "部分功能可能受限，但将尝试扫描可用设备", Toast.LENGTH_LONG).show();
+                    scanForCameras();
+                }
             }
         }
     }
