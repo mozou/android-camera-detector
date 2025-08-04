@@ -709,7 +709,7 @@ public class CameraDetector {
     private boolean testUPnPDeviceAccess(String ipAddress) {
         // Try common camera HTTP paths
         for (int port : new int[]{80, 8080, 554}) {
-            for (String path : CAMERA_HTTP_PATHS) {
+            for (String path : CAMERA_DETECTION_PATHS) {
                 try {
                     URL url = new URL("http://" + ipAddress + ":" + port + path);
                     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
