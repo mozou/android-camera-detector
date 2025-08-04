@@ -151,7 +151,7 @@ public class CameraDetector {
         listener.onScanProgress("Starting to scan for camera devices...");
         
         // Reset scan completion tracking
-        activeScanCount.set(4); // WiFi, Network, Bluetooth, UPnP
+        activeScanCount.set(7); // WiFi, Network, Bluetooth, UPnP, Broadcast, Public IP, Hotspot
         scanCompleteNotified = false;
         
         // Use thread pool to run scans in parallel for better efficiency
@@ -162,7 +162,7 @@ public class CameraDetector {
         });
         
         executorService.execute(() -> {
-            // 2. Scan for network cameras
+            // 2. Scan for network cameras in local network
             scanNetworkCameras(listener);
             checkScanCompletion(listener);
         });
@@ -179,6 +179,24 @@ public class CameraDetector {
             checkScanCompletion(listener);
         });
         
+        executorService.execute(() -> {
+            // 5. Scan for cameras via broadcast discovery
+            scanBroadcastCameras(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 6. Scan for cameras on public/external networks
+            scanPublicNetworkCameras(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 7. Scan for camera hotspots (cameras creating their own WiFi)
+            scanCameraHotspots(listener);
+            checkScanCompletion(listener);
+        });
+        
         // Set a timeout to ensure scan completion is reported even if some scans hang
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!scanCompleteNotified) {
@@ -186,7 +204,7 @@ public class CameraDetector {
                 listener.onScanComplete();
                 scanCompleteNotified = true;
             }
-        }, 60000); // 60 second timeout
+        }, 90000); // 90 second timeout for extended scanning
     }
     
     /**
