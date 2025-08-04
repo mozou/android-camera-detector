@@ -1450,6 +1450,32 @@ public class CameraDetector {
         return null;
     }
     
+    /**
+     * Extract manufacturer from server header
+     */
+    private String extractManufacturerFromServer(String server) {
+        if (server == null) return "Unknown";
+        
+        server = server.toLowerCase();
+        if (server.contains("hikvision")) return "Hikvision";
+        if (server.contains("dahua")) return "Dahua";
+        if (server.contains("axis")) return "Axis";
+        if (server.contains("vivotek")) return "Vivotek";
+        if (server.contains("mobotix")) return "Mobotix";
+        if (server.contains("bosch")) return "Bosch";
+        if (server.contains("pelco")) return "Pelco";
+        if (server.contains("panasonic")) return "Panasonic";
+        if (server.contains("sony")) return "Sony";
+        if (server.contains("samsung")) return "Samsung";
+        if (server.contains("ipcam")) return "Generic IP Camera";
+        if (server.contains("webcam")) return "Generic Webcam";
+        if (server.contains("camera")) return "Generic Camera";
+        if (server.contains("dvr")) return "DVR System";
+        if (server.contains("nvr")) return "NVR System";
+        
+        return "Unknown";
+    }
+    
     public void destroy() {
         if (executorService != null && !executorService.isShutdown()) {
             executorService.shutdown();
