@@ -10,6 +10,7 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -28,6 +29,9 @@ public class MainActivity extends AppCompatActivity {
     private ListView lvCameraList;
     private Button btnScanCameras;
     private Button btnControlCameras;
+    private ProgressBar progressBar;
+    private TextView tvScanStatus;
+    private TextView tvScanProgress;
     
     private CameraManager cameraManager;
     private CameraDetector cameraDetector;
@@ -50,10 +54,18 @@ public class MainActivity extends AppCompatActivity {
         lvCameraList = findViewById(R.id.lv_camera_list);
         btnScanCameras = findViewById(R.id.btn_scan_cameras);
         btnControlCameras = findViewById(R.id.btn_control_cameras);
+        progressBar = findViewById(R.id.progress_bar);
+        tvScanStatus = findViewById(R.id.tv_scan_status);
+        tvScanProgress = findViewById(R.id.tv_scan_progress);
         
         detectedCameras = new ArrayList<>();
         cameraAdapter = new CameraListAdapter(this, detectedCameras);
         lvCameraList.setAdapter(cameraAdapter);
+        
+        // Initialize progress UI
+        progressBar.setVisibility(View.GONE);
+        tvScanStatus.setVisibility(View.GONE);
+        tvScanProgress.setVisibility(View.GONE);
         
         btnScanCameras.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -232,6 +244,9 @@ public class MainActivity extends AppCompatActivity {
     private void scanForCameras() {
         detectedCameras.clear();
         
+        // Show progress UI
+        showScanProgress();
+        
         // 检测本地摄像头
         scanLocalCameras();
         
@@ -244,6 +259,7 @@ public class MainActivity extends AppCompatActivity {
                     public void run() {
                         detectedCameras.add(cameraInfo);
                         updateCameraList();
+                        updateScanProgress("发现设备: " + cameraInfo.getName(), -1);
                     }
                 });
             }
@@ -253,7 +269,8 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Toast.makeText(MainActivity.this, "扫描完成", Toast.LENGTH_SHORT).show();
+                        hideScanProgress();
+                        Toast.makeText(MainActivity.this, "扫描完成！共发现 " + detectedCameras.size() + " 个设备", Toast.LENGTH_LONG).show();
                     }
                 });
             }
@@ -263,11 +280,44 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Toast.makeText(MainActivity.this, status, Toast.LENGTH_SHORT).show();
+                        updateScanProgress(status, -1);
                     }
                 });
             }
         });
+    }
+    
+    private void showScanProgress() {
+        progressBar.setVisibility(View.VISIBLE);
+        tvScanStatus.setVisibility(View.VISIBLE);
+        tvScanProgress.setVisibility(View.VISIBLE);
+        
+        progressBar.setIndeterminate(true);
+        tvScanStatus.setText("正在扫描摄像头设备...");
+        tvScanProgress.setText("准备开始扫描");
+        
+        btnScanCameras.setEnabled(false);
+        btnScanCameras.setText("扫描中...");
+    }
+    
+    private void hideScanProgress() {
+        progressBar.setVisibility(View.GONE);
+        tvScanStatus.setVisibility(View.GONE);
+        tvScanProgress.setVisibility(View.GONE);
+        
+        btnScanCameras.setEnabled(true);
+        btnScanCameras.setText("扫描摄像头");
+    }
+    
+    private void updateScanProgress(String status, int progress) {
+        tvScanProgress.setText(status);
+        
+        if (progress >= 0) {
+            progressBar.setIndeterminate(false);
+            progressBar.setProgress(progress);
+        } else {
+            progressBar.setIndeterminate(true);
+        }
     }
     
     private void scanLocalCameras() {

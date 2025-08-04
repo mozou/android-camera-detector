@@ -128,13 +128,21 @@ public class CameraDetector {
     };
     
     // Scan completion tracking
+    // Scan completion tracking
     private AtomicInteger activeScanCount = new AtomicInteger(0);
     private boolean scanCompleteNotified = false;
     
+    // Progress tracking
+    private AtomicInteger totalScansStarted = new AtomicInteger(0);
+    private AtomicInteger scansCompleted = new AtomicInteger(0);
+    private AtomicInteger devicesFound = new AtomicInteger(0);
+    
+    public interface OnCameraDetectedListener {
     public interface OnCameraDetectedListener {
         void onCameraDetected(CameraInfo cameraInfo);
         void onScanComplete();
         void onScanProgress(String status);
+        void onProgressUpdate(int current, int total, String currentTask);
     }
     
     public CameraDetector(Context context) {
@@ -319,49 +327,73 @@ public class CameraDetector {
     }
     
     /**
-     * Scan for Bluetooth cameras
+     * Start comprehensive scanning for camera devices
      */
-    public void scanBluetoothCameras(OnCameraDetectedListener listener) {
-        if (bluetoothAdapter == null) {
-            listener.onScanProgress("Bluetooth adapter not available");
-            return;
-        }
+    public void startComprehensiveScan(OnCameraDetectedListener listener) {
+        listener.onScanProgress("Starting comprehensive camera scan...");
         
-        if (!bluetoothAdapter.isEnabled()) {
-            listener.onScanProgress("Bluetooth not enabled");
-            // Try to request user to enable Bluetooth
-            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            enableBtIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            try {
-                context.startActivity(enableBtIntent);
-                // Give user some time to respond to Bluetooth enable request
-                Thread.sleep(5000);
-                // Recheck Bluetooth status
-                if (!bluetoothAdapter.isEnabled()) {
-                    listener.onScanProgress("User did not enable Bluetooth, skipping Bluetooth device scan");
-                    return;
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "Unable to request Bluetooth enable", e);
-                return;
+        // Reset scan completion tracking - increased to include new scan types
+        activeScanCount.set(8); // WiFi, Network, Bluetooth, UPnP, Broadcast, PublicNetwork, Hotspots, WideRange
+        scanCompleteNotified = false;
+        
+        // Use thread pool to run scans in parallel for better efficiency
+        executorService.execute(() -> {
+            // 1. Scan for cameras in WiFi networks
+            scanWifiCameras(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 2. Scan for network cameras (local subnet)
+            scanNetworkCameras(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 3. Scan for Bluetooth cameras
+            scanBluetoothCameras(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 4. Scan for UPnP devices
+            scanUPnPCameras(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 5. Broadcast discovery scan
+            scanBroadcastCameras(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 6. Cross-network and adjacent subnet scan
+            scanPublicNetworkCameras(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 7. Camera hotspot detection
+            scanCameraHotspots(listener);
+            checkScanCompletion(listener);
+        });
+        
+        executorService.execute(() -> {
+            // 8. Wide range network scan for separate network segments
+            scanWideRangeNetworks(listener);
+            checkScanCompletion(listener);
+        });
+        
+        // Set a timeout to ensure scan completion is reported even if some scans hang
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!scanCompleteNotified) {
+                listener.onScanProgress("Scan timeout reached, finalizing results");
+                listener.onScanComplete();
+                scanCompleteNotified = true;
             }
-        }
-        
-        listener.onScanProgress("Scanning for Bluetooth cameras...");
-        
-        try {
-            // Scan paired Bluetooth devices
-            Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
-            for (BluetoothDevice device : pairedDevices) {
-                if (isCameraDevice(device)) {
-                    CameraInfo cameraInfo = createBluetoothCameraInfo(device);
-                    listener.onCameraDetected(cameraInfo);
-                }
-            }
-        } catch (SecurityException e) {
-            Log.e(TAG, "No Bluetooth permissions", e);
-            listener.onScanProgress("Missing Bluetooth permissions, cannot get paired devices");
-        }
+        }, 90000); // 90 second timeout for comprehensive scan
+    }
         
         // Start discovering new devices
         try {
@@ -1474,6 +1506,510 @@ public class CameraDetector {
         if (server.contains("nvr")) return "NVR System";
         
         return "Unknown";
+    }
+    
+    /**
+     * Wide range network scan for cameras on separate network segments
+     * This is specifically for scenarios where cameras are on different network lines
+     */
+    private void scanWideRangeNetworks(OnCameraDetectedListener listener) {
+        listener.onScanProgress("Scanning wide range networks for cameras...");
+        
+        // Common network segments used in office/building environments
+        String[] commonNetworkSegments = {
+            "192.168.0.", "192.168.1.", "192.168.2.", "192.168.3.", "192.168.4.",
+            "192.168.10.", "192.168.20.", "192.168.30.", "192.168.50.", "192.168.100.",
+            "10.0.0.", "10.0.1.", "10.0.2.", "10.0.10.", "10.0.20.",
+            "10.1.0.", "10.1.1.", "10.1.10.", "10.10.0.", "10.10.1.",
+            "172.16.0.", "172.16.1.", "172.16.10.", "172.17.0.", "172.18.0."
+        };
+        
+        // Common camera IP addresses within each segment
+        int[] commonCameraIPs = {1, 2, 10, 20, 50, 64, 100, 101, 108, 110, 200, 254};
+        
+        // Common camera ports (prioritized)
+        int[] priorityCameraPorts = {554, 8080, 80, 8000, 8554, 1935};
+        
+        CountDownLatch latch = new CountDownLatch(commonNetworkSegments.length * commonCameraIPs.length);
+        
+        for (String segment : commonNetworkSegments) {
+            for (int ip : commonCameraIPs) {
+                final String targetIP = segment + ip;
+                
+                executorService.execute(() -> {
+                    try {
+                        // Quick ping test first
+                        if (isHostReachable(targetIP, 1000)) {
+                            listener.onScanProgress("Found reachable host: " + targetIP);
+                            
+                            // Test camera ports
+                            for (int port : priorityCameraPorts) {
+                                CameraInfo camera = quickCameraVerification(targetIP, port);
+                                if (camera != null) {
+                                    listener.onCameraDetected(camera);
+                                    break; // Found camera on this IP, no need to test other ports
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        // Continue to next IP
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+        }
+        
+        // Wait for all scans to complete or timeout
+        try {
+            latch.await(60, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        
+        listener.onScanProgress("Wide range network scan completed");
+    }
+    
+    /**
+     * Quick host reachability test
+     */
+    private boolean isHostReachable(String host, int timeout) {
+        try {
+            InetAddress address = InetAddress.getByName(host);
+            return address.isReachable(timeout);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Quick camera verification for wide range scanning
+     */
+    private CameraInfo quickCameraVerification(String ipAddress, int port) {
+        try {
+            // Test socket connection first
+            Socket socket = new Socket();
+            socket.connect(new InetSocketAddress(ipAddress, port), 2000);
+            socket.close();
+            
+            // If port is open, do quick HTTP test
+            URL url = new URL("http://" + ipAddress + ":" + port + "/");
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(3000);
+            connection.setReadTimeout(3000);
+            connection.setRequestMethod("HEAD");
+            connection.setRequestProperty("User-Agent", "Camera-Detector/1.0");
+            
+            int responseCode = connection.getResponseCode();
+            String server = connection.getHeaderField("Server");
+            String contentType = connection.getHeaderField("Content-Type");
+            String wwwAuth = connection.getHeaderField("WWW-Authenticate");
+            
+            connection.disconnect();
+            
+            // Check if this looks like a camera
+            boolean isCameraLikely = false;
+            String detectedManufacturer = "Unknown";
+            
+            if (server != null) {
+                server = server.toLowerCase();
+                for (String signature : CAMERA_SERVER_SIGNATURES) {
+                    if (server.contains(signature)) {
+                        isCameraLikely = true;
+                        detectedManufacturer = extractManufacturerFromServer(server);
+                        break;
+                    }
+                }
+            }
+            
+            if (contentType != null && (
+                contentType.contains("image/jpeg") ||
+                contentType.contains("multipart/x-mixed-replace") ||
+                contentType.contains("video/"))) {
+                isCameraLikely = true;
+            }
+            
+            if (wwwAuth != null && (
+                wwwAuth.contains("Camera") ||
+                wwwAuth.contains("DVR") ||
+                wwwAuth.contains("NVR") ||
+                wwwAuth.contains("ONVIF"))) {
+                isCameraLikely = true;
+            }
+            
+            // Special handling for common camera response codes
+            if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED ||
+                responseCode == HttpURLConnection.HTTP_FORBIDDEN ||
+                responseCode == HttpURLConnection.HTTP_OK) {
+                
+                // Additional verification for common camera paths
+                if (testCameraPath(ipAddress, port, "/onvif/device_service") ||
+                    testCameraPath(ipAddress, port, "/cgi-bin/snapshot.cgi") ||
+                    testCameraPath(ipAddress, port, "/ISAPI/System/deviceInfo")) {
+                    isCameraLikely = true;
+                }
+            }
+            
+            if (isCameraLikely) {
+                CameraInfo cameraInfo = new CameraInfo();
+                cameraInfo.setId("wide_" + ipAddress + ":" + port);
+                cameraInfo.setIpAddress(ipAddress);
+                cameraInfo.setPort(port);
+                cameraInfo.setType(CameraInfo.CameraType.NETWORK);
+                cameraInfo.setAccessible(true);
+                cameraInfo.setHasPermission(responseCode != HttpURLConnection.HTTP_UNAUTHORIZED);
+                cameraInfo.setManufacturer(detectedManufacturer);
+                
+                String name = detectedManufacturer.equals("Unknown") ? 
+                    "Network Camera" : detectedManufacturer + " Camera";
+                cameraInfo.setName(name + " (" + ipAddress + ":" + port + ")");
+                
+                String description = "Camera found on separate network segment";
+                if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                    description += " (requires authentication)";
+                }
+                cameraInfo.setDescription(description);
+                
+                return cameraInfo;
+            }
+            
+        } catch (Exception e) {
+            // Not a camera or not accessible
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Test specific camera path
+     */
+    private boolean testCameraPath(String ipAddress, int port, String path) {
+        try {
+            URL url = new URL("http://" + ipAddress + ":" + port + path);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setConnectTimeout(2000);
+            connection.setReadTimeout(2000);
+            connection.setRequestMethod("HEAD");
+            
+            int responseCode = connection.getResponseCode();
+            connection.disconnect();
+            
+            return responseCode == HttpURLConnection.HTTP_OK || 
+                   responseCode == HttpURLConnection.HTTP_UNAUTHORIZED ||
+                   responseCode == HttpURLConnection.HTTP_FORBIDDEN;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Scan for cameras using broadcast discovery protocols
+     */
+    private void scanBroadcastCameras(OnCameraDetectedListener listener) {
+        listener.onScanProgress("Scanning for cameras using broadcast discovery...");
+        
+        executorService.execute(() -> {
+            try {
+                // ONVIF WS-Discovery
+                sendONVIFDiscovery(listener);
+                
+                // Generic SSDP discovery
+                sendSSDPDiscovery(listener);
+                
+                // Manufacturer-specific discovery
+                sendManufacturerDiscovery(listener);
+                
+            } catch (Exception e) {
+                Log.e(TAG, "Broadcast discovery failed", e);
+                listener.onScanProgress("Broadcast discovery completed with errors");
+            }
+        });
+    }
+    
+    /**
+     * Send ONVIF WS-Discovery message
+     */
+    private void sendONVIFDiscovery(OnCameraDetectedListener listener) {
+        try {
+            String onvifMsg = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+                    "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\" " +
+                    "xmlns:wsa=\"http://schemas.xmlsoap.org/ws/2004/08/addressing\" " +
+                    "xmlns:wsd=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\">" +
+                    "<soap:Header>" +
+                    "<wsa:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</wsa:Action>" +
+                    "<wsa:MessageID>urn:uuid:12345678-1234-1234-1234-123456789012</wsa:MessageID>" +
+                    "<wsa:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</wsa:To>" +
+                    "</soap:Header>" +
+                    "<soap:Body>" +
+                    "<wsd:Probe>" +
+                    "<wsd:Types>NetworkVideoTransmitter</wsd:Types>" +
+                    "</wsd:Probe>" +
+                    "</soap:Body>" +
+                    "</soap:Envelope>";
+            
+            DatagramSocket socket = new DatagramSocket();
+            DatagramPacket packet = new DatagramPacket(
+                    onvifMsg.getBytes(),
+                    onvifMsg.length(),
+                    InetAddress.getByName("239.255.255.250"),
+                    3702
+            );
+            
+            socket.send(packet);
+            
+            // Listen for responses
+            byte[] buffer = new byte[2048];
+            DatagramPacket response = new DatagramPacket(buffer, buffer.length);
+            socket.setSoTimeout(5000);
+            
+            try {
+                while (true) {
+                    socket.receive(response);
+                    String responseStr = new String(response.getData(), 0, response.getLength());
+                    
+                    if (responseStr.contains("NetworkVideoTransmitter") || 
+                        responseStr.contains("onvif") ||
+                        responseStr.contains("camera")) {
+                        
+                        CameraInfo cameraInfo = createBroadcastCameraInfo(
+                            response.getAddress().getHostAddress(), 
+                            responseStr, 
+                            "ONVIF"
+                        );
+                        listener.onCameraDetected(cameraInfo);
+                    }
+                }
+            } catch (IOException e) {
+                // Timeout reached
+            }
+            
+            socket.close();
+            
+        } catch (Exception e) {
+            Log.e(TAG, "ONVIF discovery failed", e);
+        }
+    }
+    
+    /**
+     * Send SSDP discovery message
+     */
+    private void sendSSDPDiscovery(OnCameraDetectedListener listener) {
+        try {
+            String ssdpMsg = "M-SEARCH * HTTP/1.1\r\n" +
+                    "HOST: 239.255.255.250:1900\r\n" +
+                    "MAN: \"ssdp:discover\"\r\n" +
+                    "ST: upnp:rootdevice\r\n" +
+                    "MX: 3\r\n\r\n";
+            
+            DatagramSocket socket = new DatagramSocket();
+            DatagramPacket packet = new DatagramPacket(
+                    ssdpMsg.getBytes(),
+                    ssdpMsg.length(),
+                    InetAddress.getByName("239.255.255.250"),
+                    1900
+            );
+            
+            socket.send(packet);
+            
+            // Listen for responses
+            byte[] buffer = new byte[1024);
+            DatagramPacket response = new DatagramPacket(buffer, buffer.length);
+            socket.setSoTimeout(5000);
+            
+            try {
+                while (true) {
+                    socket.receive(response);
+                    String responseStr = new String(response.getData(), 0, response.getLength());
+                    
+                    if (isUPnPCameraDevice(responseStr)) {
+                        CameraInfo cameraInfo = createBroadcastCameraInfo(
+                            response.getAddress().getHostAddress(), 
+                            responseStr, 
+                            "UPnP"
+                        );
+                        listener.onCameraDetected(cameraInfo);
+                    }
+                }
+            } catch (IOException e) {
+                // Timeout reached
+            }
+            
+            socket.close();
+            
+        } catch (Exception e) {
+            Log.e(TAG, "SSDP discovery failed", e);
+        }
+    }
+    
+    /**
+     * Send manufacturer-specific discovery messages
+     */
+    private void sendManufacturerDiscovery(OnCameraDetectedListener listener) {
+        // Hikvision discovery
+        try {
+            String hikvisionMsg = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                    "<Probe><Uuid>12345678-1234-1234-1234-123456789012</Uuid>" +
+                    "<Types>inquiry</Types></Probe>";
+            
+            DatagramSocket socket = new DatagramSocket();
+            DatagramPacket packet = new DatagramPacket(
+                    hikvisionMsg.getBytes(),
+                    hikvisionMsg.length(),
+                    InetAddress.getByName("239.255.255.250"),
+                    37020
+            );
+            
+            socket.send(packet);
+            socket.close();
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Hikvision discovery failed", e);
+        }
+    }
+    
+    /**
+     * Create camera info from broadcast discovery
+     */
+    private CameraInfo createBroadcastCameraInfo(String ipAddress, String response, String protocol) {
+        CameraInfo cameraInfo = new CameraInfo();
+        cameraInfo.setId("broadcast_" + ipAddress);
+        cameraInfo.setIpAddress(ipAddress);
+        cameraInfo.setType(CameraInfo.CameraType.NETWORK);
+        cameraInfo.setAccessible(true);
+        cameraInfo.setHasPermission(false);
+        
+        String manufacturer = extractManufacturerFromResponse(response);
+        if (manufacturer != null) {
+            cameraInfo.setManufacturer(manufacturer);
+            cameraInfo.setName(manufacturer + " Camera (" + ipAddress + ")");
+        } else {
+            cameraInfo.setName(protocol + " Camera (" + ipAddress + ")");
+        }
+        
+        cameraInfo.setDescription("Camera discovered via " + protocol + " broadcast protocol");
+        
+        return cameraInfo;
+    }
+    
+    /**
+     * Scan for cameras on public/adjacent networks
+     */
+    private void scanPublicNetworkCameras(OnCameraDetectedListener listener) {
+        listener.onScanProgress("Scanning adjacent networks for cameras...");
+        
+        if (wifiManager == null) return;
+        
+        try {
+            int currentIp = wifiManager.getConnectionInfo().getIpAddress();
+            String currentSubnet = Formatter.formatIpAddress(currentIp);
+            String[] parts = currentSubnet.split("\\.");
+            
+            if (parts.length == 4) {
+                String baseNetwork = parts[0] + "." + parts[1] + ".";
+                int currentThirdOctet = Integer.parseInt(parts[2]);
+                
+                // Scan adjacent subnets (±2 range)
+                for (int i = Math.max(0, currentThirdOctet - 2); 
+                     i <= Math.min(255, currentThirdOctet + 2); i++) {
+                    
+                    if (i != currentThirdOctet) { // Skip current subnet (already scanned)
+                        String targetNetwork = baseNetwork + i + ".";
+                        scanNetworkSegment(targetNetwork, listener);
+                    }
+                }
+            }
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Adjacent network scan failed", e);
+        }
+    }
+    
+    /**
+     * Scan a specific network segment
+     */
+    private void scanNetworkSegment(String networkPrefix, OnCameraDetectedListener listener) {
+        int[] commonIPs = {1, 2, 10, 20, 50, 64, 100, 101, 108, 200, 254};
+        
+        for (int ip : commonIPs) {
+            String targetIP = networkPrefix + ip;
+            
+            executorService.execute(() -> {
+                CameraInfo camera = quickCameraVerification(targetIP, 554); // RTSP port
+                if (camera == null) {
+                    camera = quickCameraVerification(targetIP, 8080); // HTTP port
+                }
+                if (camera == null) {
+                    camera = quickCameraVerification(targetIP, 80); // Standard HTTP
+                }
+                
+                if (camera != null) {
+                    listener.onCameraDetected(camera);
+                }
+            });
+        }
+    }
+    
+    /**
+     * Scan for camera hotspots
+     */
+    private void scanCameraHotspots(OnCameraDetectedListener listener) {
+        listener.onScanProgress("Scanning for camera WiFi hotspots...");
+        
+        if (wifiManager == null) return;
+        
+        try {
+            List<ScanResult> scanResults = wifiManager.getScanResults();
+            
+            for (ScanResult result : scanResults) {
+                if (result.SSID != null && isCameraHotspot(result.SSID)) {
+                    CameraInfo cameraInfo = createHotspotCameraInfo(result);
+                    listener.onCameraDetected(cameraInfo);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Camera hotspot scan failed", e);
+        }
+    }
+    
+    /**
+     * Check if SSID is a camera hotspot
+     */
+    private boolean isCameraHotspot(String ssid) {
+        String lowerSSID = ssid.toLowerCase();
+        
+        // Camera setup/configuration hotspots
+        return lowerSSID.matches(".*cam.*setup.*") ||
+               lowerSSID.matches(".*camera.*config.*") ||
+               lowerSSID.matches(".*ipc.*[0-9]+.*") ||
+               lowerSSID.matches(".*hikvision.*") ||
+               lowerSSID.matches(".*dahua.*") ||
+               lowerSSID.matches(".*axis.*setup.*") ||
+               lowerSSID.matches(".*vivotek.*") ||
+               lowerSSID.matches(".*mobotix.*") ||
+               lowerSSID.startsWith("cam_") ||
+               lowerSSID.startsWith("camera_") ||
+               lowerSSID.startsWith("ipc_");
+    }
+    
+    /**
+     * Create camera info for hotspot
+     */
+    private CameraInfo createHotspotCameraInfo(ScanResult result) {
+        CameraInfo cameraInfo = new CameraInfo();
+        cameraInfo.setId("hotspot_" + result.BSSID);
+        cameraInfo.setName("Camera Hotspot: " + result.SSID);
+        cameraInfo.setType(CameraInfo.CameraType.NETWORK);
+        cameraInfo.setAccessible(false); // Requires connection to hotspot
+        cameraInfo.setHasPermission(false);
+        
+        String manufacturer = getManufacturerFromMac(result.BSSID);
+        if (manufacturer != null && !manufacturer.equals("Unknown")) {
+            cameraInfo.setManufacturer(manufacturer);
+        }
+        
+        cameraInfo.setDescription("Camera in setup/configuration mode. Connect to this hotspot to configure the camera.");
+        
+        return cameraInfo;
     }
     
     public void destroy() {
