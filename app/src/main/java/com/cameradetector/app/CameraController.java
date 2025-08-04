@@ -4,10 +4,13 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraManager;
 import android.net.Uri;
 import android.provider.Settings;
+import android.util.Log;
+import androidx.core.content.ContextCompat;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
@@ -196,10 +199,10 @@ public class CameraController {
             // Check if we have the necessary Bluetooth permissions
             boolean hasBluetoothPermission = false;
             
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (android.os.Build.VERSION.SDK_INT >= 31) { // VERSION_CODES.S = 31
                 // Android 12+ specific Bluetooth permissions
                 hasBluetoothPermission = ContextCompat.checkSelfPermission(context, 
-                    android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+                    "android.permission.BLUETOOTH_CONNECT") == PackageManager.PERMISSION_GRANTED;
             } else {
                 // Older Android versions
                 hasBluetoothPermission = ContextCompat.checkSelfPermission(context, 
@@ -250,10 +253,10 @@ public class CameraController {
             // Check if we have the necessary Bluetooth permissions
             boolean hasBluetoothPermission = false;
             
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (android.os.Build.VERSION.SDK_INT >= 31) { // VERSION_CODES.S = 31
                 // Android 12+ specific Bluetooth permissions
                 hasBluetoothPermission = ContextCompat.checkSelfPermission(context, 
-                    android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+                    "android.permission.BLUETOOTH_CONNECT") == PackageManager.PERMISSION_GRANTED;
             } else {
                 // Older Android versions
                 hasBluetoothPermission = ContextCompat.checkSelfPermission(context, 

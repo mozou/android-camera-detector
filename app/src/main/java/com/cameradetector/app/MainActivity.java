@@ -108,13 +108,13 @@ public class MainActivity extends AppCompatActivity {
         }
         
         // Bluetooth permissions with Android version check
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        if (android.os.Build.VERSION.SDK_INT >= 31) { // VERSION_CODES.S = 31
             // Android 12+ specific Bluetooth permissions
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                bluetoothPermissions.add(Manifest.permission.BLUETOOTH_SCAN);
+            if (ContextCompat.checkSelfPermission(this, "android.permission.BLUETOOTH_SCAN") != PackageManager.PERMISSION_GRANTED) {
+                bluetoothPermissions.add("android.permission.BLUETOOTH_SCAN");
             }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                bluetoothPermissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+            if (ContextCompat.checkSelfPermission(this, "android.permission.BLUETOOTH_CONNECT") != PackageManager.PERMISSION_GRANTED) {
+                bluetoothPermissions.add("android.permission.BLUETOOTH_CONNECT");
             }
         } else {
             // Older Android versions
@@ -183,12 +183,12 @@ public class MainActivity extends AppCompatActivity {
                     // Location permissions granted, request bluetooth
                     List<String> bluetoothPermissions = new ArrayList<>();
                     
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                            bluetoothPermissions.add(Manifest.permission.BLUETOOTH_SCAN);
+                    if (android.os.Build.VERSION.SDK_INT >= 31) { // VERSION_CODES.S = 31
+                        if (ContextCompat.checkSelfPermission(this, "android.permission.BLUETOOTH_SCAN") != PackageManager.PERMISSION_GRANTED) {
+                            bluetoothPermissions.add("android.permission.BLUETOOTH_SCAN");
                         }
-                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                            bluetoothPermissions.add(Manifest.permission.BLUETOOTH_CONNECT);
+                        if (ContextCompat.checkSelfPermission(this, "android.permission.BLUETOOTH_CONNECT") != PackageManager.PERMISSION_GRANTED) {
+                            bluetoothPermissions.add("android.permission.BLUETOOTH_CONNECT");
                         }
                     } else {
                         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
