@@ -45,11 +45,22 @@ public class CameraDetector {
     private WifiManager wifiManager;
     private ExecutorService executorService;
     
-    // Common network camera ports
-    private static final int[] CAMERA_PORTS = {
-        80, 8080, 554, 1935, 8000, 8888, 9000, 8081, 8082, 8083,
-        81, 82, 83, 84, 85, 8001, 8002, 8003, 8004, 8005,
-        1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032
+    // Enhanced camera-specific ports with priority
+    private static final int[] PRIMARY_CAMERA_PORTS = {
+        554,   // RTSP (most common for IP cameras)
+        8080,  // HTTP alternative for cameras
+        80,    // HTTP (web interface)
+        1935,  // RTMP streaming
+        8000,  // Common camera HTTP port
+        8554,  // Alternative RTSP port
+        10554, // Another RTSP variant
+    };
+    
+    private static final int[] SECONDARY_CAMERA_PORTS = {
+        8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089,
+        9000, 9001, 9002, 9003, 9004, 9005,
+        7000, 7001, 7002, 7003, 7004, 7005,
+        6000, 6001, 6002, 6003, 6004, 6005
     };
     
     // Common camera WiFi network name keywords
@@ -60,30 +71,60 @@ public class CameraDetector {
         "dvr", "nvr", "ipc", "ip-cam", "cctv"
     };
     
-    // Camera device MAC address prefixes (some well-known manufacturers)
-    private static final String[] CAMERA_MAC_PREFIXES = {
-        "00:12:16", // Hikvision
-        "44:19:B6", // Dahua
-        "00:0F:7C", // Axis
-        "00:40:8C", // Axis
-        "00:80:F0", // Panasonic
-        "00:02:D1", // Vivotek
-        "00:03:C5", // Mobotix
-        "C0:56:E3", // Hangzhou Hikvision
-        "BC:AD:28", // Hangzhou Hikvision
-        "A4:14:37", // Hangzhou Hikvision
-        "54:C4:15", // Hangzhou Hikvision
-        "4C:11:BF", // Zhejiang Dahua
-        "90:02:A9", // Zhejiang Dahua
-        "E0:50:8B"  // Zhejiang Dahua
+    // Comprehensive camera manufacturer MAC prefixes
+    private static final String[][] CAMERA_MAC_DATABASE = {
+        // Hikvision (multiple prefixes)
+        {"00:12:16", "Hikvision"}, {"C0:56:E3", "Hikvision"}, {"BC:AD:28", "Hikvision"},
+        {"A4:14:37", "Hikvision"}, {"54:C4:15", "Hikvision"}, {"28:57:BE", "Hikvision"},
+        {"44:19:B6", "Hikvision"}, {"68:3E:34", "Hikvision"}, {"B0:7B:25", "Hikvision"},
+        
+        // Dahua
+        {"4C:11:BF", "Dahua"}, {"90:02:A9", "Dahua"}, {"E0:50:8B", "Dahua"},
+        {"08:57:00", "Dahua"}, {"6C:C2:17", "Dahua"}, {"F4:5C:89", "Dahua"},
+        
+        // Axis Communications
+        {"00:0F:7C", "Axis"}, {"00:40:8C", "Axis"}, {"AC:CC:8E", "Axis"},
+        {"B8:A4:4F", "Axis"}, {"00:80:F0", "Axis"},
+        
+        // Other major manufacturers
+        {"00:02:D1", "Vivotek"}, {"00:03:C5", "Mobotix"}, {"00:80:F0", "Panasonic"},
+        {"00:1B:DE", "Bosch"}, {"00:0E:8F", "Bosch"}, {"00:1F:84", "Bosch"},
+        {"00:50:C2", "IEEE Registration Authority"}, {"00:1D:7E", "Honeywell"},
+        {"00:1C:10", "Pelco"}, {"00:03:7F", "Atheros"}, {"00:1A:70", "Arecont Vision"},
+        {"00:40:8C", "Axis"}, {"00:0F:7C", "Axis"}, {"AC:CC:8E", "Axis"},
+        
+        // Chinese manufacturers
+        {"34:CE:00", "TP-Link"}, {"50:C7:BF", "TP-Link"}, {"A0:F3:C1", "TP-Link"},
+        {"00:1F:3F", "D-Link"}, {"14:CC:20", "D-Link"}, {"C8:D3:A3", "D-Link"},
+        {"00:26:5A", "Netgear"}, {"A0:04:60", "Netgear"}, {"28:C6:8E", "Netgear"}
     };
     
-    // Common camera HTTP paths for detection
-    private static final String[] CAMERA_HTTP_PATHS = {
-        "/", "/index.html", "/live", "/view", "/video", "/image", "/img",
-        "/snapshot", "/snap.jpg", "/live.jpg", "/mjpg/video.mjpg",
-        "/cgi-bin/snapshot.cgi", "/cgi-bin/camera", "/videostream.cgi",
-        "/axis-cgi/jpg/image.cgi", "/onvif/device_service"
+    // Camera-specific HTTP paths and endpoints
+    private static final String[] CAMERA_DETECTION_PATHS = {
+        // ONVIF standard paths (most reliable for camera detection)
+        "/onvif/device_service", "/onvif/Device", "/onvif/Media",
+        
+        // Common camera API endpoints
+        "/cgi-bin/snapshot.cgi", "/cgi-bin/camera", "/cgi-bin/hi3510/snap.cgi",
+        "/videostream.cgi", "/mjpg/video.mjpg", "/video.cgi",
+        
+        // Manufacturer-specific paths
+        "/axis-cgi/jpg/image.cgi", "/axis-cgi/mjpg/video.cgi", // Axis
+        "/ISAPI/System/deviceInfo", "/ISAPI/Streaming/channels", // Hikvision
+        "/cgi-bin/configManager.cgi?action=getConfig&name=General", // Dahua
+        "/cgi-bin/guest/Video.cgi?media=MJPEG", // Vivotek
+        "/nphMotionJpeg?Resolution=640x480&Quality=Standard", // Mobotix
+        
+        // Generic camera paths
+        "/snapshot.jpg", "/image.jpg", "/video", "/live", "/stream",
+        "/cam.jpg", "/webcam.jpg", "/camera.jpg"
+    };
+    
+    // Camera-specific HTTP headers to look for
+    private static final String[] CAMERA_SERVER_SIGNATURES = {
+        "hikvision", "dahua", "axis", "vivotek", "mobotix", "bosch", "pelco",
+        "arecont", "panasonic", "sony", "samsung", "lg", "canon", "nikon",
+        "ipcam", "webcam", "camera", "dvr", "nvr", "surveillance", "security"
     };
     
     // Scan completion tracking
@@ -416,38 +457,86 @@ public class CameraDetector {
     }
     
     /**
-     * Determine if a WiFi network is a camera device
+     * Enhanced WiFi camera detection with reduced false positives
      */
     private boolean isCameraWifiNetwork(ScanResult result) {
-        // Prevent crashes due to null values
         if (result.SSID == null || result.BSSID == null) {
             return false;
         }
         
-        String ssid = result.SSID.toLowerCase();
+        String ssid = result.SSID.toLowerCase().trim();
         String bssid = result.BSSID.toUpperCase();
         
-        // Check if SSID contains camera keywords
-        for (String keyword : CAMERA_WIFI_KEYWORDS) {
-            if (ssid.contains(keyword.toLowerCase())) {
+        // Skip empty or very short SSIDs
+        if (ssid.length() < 3) {
+            return false;
+        }
+        
+        // First check MAC address - most reliable method
+        String manufacturer = getManufacturerFromMacDatabase(bssid);
+        if (manufacturer != null && !manufacturer.equals("Unknown")) {
+            // Known camera manufacturer MAC
+            return true;
+        }
+        
+        // Check for specific camera SSID patterns (high confidence)
+        if (ssid.matches("ipc[0-9]{3,6}") ||           // IP camera with numbers
+            ssid.matches("cam[0-9]{2,4}") ||           // Camera with numbers  
+            ssid.matches("camera[_-]?[0-9]+") ||       // Camera with separator and numbers
+            ssid.matches("dvr[_-]?[0-9]+") ||          // DVR with numbers
+            ssid.matches("nvr[_-]?[0-9]+") ||          // NVR with numbers
+            ssid.matches("hikvision[_-]?.*") ||        // Hikvision devices
+            ssid.matches("dahua[_-]?.*") ||            // Dahua devices
+            ssid.matches("axis[_-]?.*")) {             // Axis devices
+            return true;
+        }
+        
+        // Check for camera-specific keywords but with stricter rules
+        int cameraKeywordCount = 0;
+        String[] strictCameraKeywords = {
+            "ipcam", "webcam", "security", "surveillance", "monitor", 
+            "摄像头", "监控", "安防", "cctv"
+        };
+        
+        for (String keyword : strictCameraKeywords) {
+            if (ssid.contains(keyword)) {
+                cameraKeywordCount++;
+            }
+        }
+        
+        // Require at least one strong camera keyword
+        if (cameraKeywordCount > 0) {
+            // Additional validation - check if it's not a common router/phone hotspot
+            if (!isLikelyRouterOrHotspot(ssid)) {
                 return true;
             }
         }
         
-        // Check MAC address prefix
-        for (String prefix : CAMERA_MAC_PREFIXES) {
-            if (bssid.startsWith(prefix)) {
+        return false;
+    }
+    
+    /**
+     * Check if SSID is likely a router or phone hotspot (to avoid false positives)
+     */
+    private boolean isLikelyRouterOrHotspot(String ssid) {
+        String[] routerPatterns = {
+            "tp-link", "d-link", "netgear", "linksys", "asus", "belkin",
+            "wifi", "internet", "home", "office", "guest", "public",
+            "android", "iphone", "samsung", "xiaomi", "huawei", "oppo", "vivo",
+            "hotspot", "mobile", "phone"
+        };
+        
+        for (String pattern : routerPatterns) {
+            if (ssid.contains(pattern)) {
                 return true;
             }
         }
         
-        // Add more heuristic detection methods
-        // Check for common camera device SSID patterns
-        if (ssid.matches("ipc[0-9]+") || 
-            ssid.matches("cam[0-9]+") || 
-            ssid.matches("camera[0-9]+") ||
-            ssid.matches("ip-?cam.*") ||
-            ssid.matches("dvr-?[0-9]+")) {
+        // Check for common router default SSID patterns
+        if (ssid.matches(".*[_-]?[0-9a-f]{4,6}$") ||  // Ends with hex digits
+            ssid.matches(".*[_-]?guest$") ||           // Guest networks
+            ssid.matches(".*[_-]?5g$") ||              // 5G networks
+            ssid.matches(".*[_-]?2\\.4g$")) {          // 2.4G networks
             return true;
         }
         
@@ -644,33 +733,27 @@ public class CameraDetector {
     }
     
     /**
-     * Get manufacturer name from MAC address
+     * Enhanced manufacturer detection from MAC address using comprehensive database
      */
     private String getManufacturerFromMac(String macAddress) {
+        return getManufacturerFromMacDatabase(macAddress);
+    }
+    
+    private String getManufacturerFromMacDatabase(String macAddress) {
         if (macAddress == null || macAddress.length() < 8) {
-            return null;
+            return "Unknown";
         }
         
         String prefix = macAddress.substring(0, 8).toUpperCase();
         
-        if (prefix.startsWith("00:12:16") || prefix.startsWith("C0:56:E3") || 
-            prefix.startsWith("BC:AD:28") || prefix.startsWith("A4:14:37") || 
-            prefix.startsWith("54:C4:15")) {
-            return "Hikvision";
-        } else if (prefix.startsWith("44:19:B6") || prefix.startsWith("4C:11:BF") || 
-                   prefix.startsWith("90:02:A9") || prefix.startsWith("E0:50:8B")) {
-            return "Dahua";
-        } else if (prefix.startsWith("00:0F:7C") || prefix.startsWith("00:40:8C")) {
-            return "Axis";
-        } else if (prefix.startsWith("00:80:F0")) {
-            return "Panasonic";
-        } else if (prefix.startsWith("00:02:D1")) {
-            return "Vivotek";
-        } else if (prefix.startsWith("00:03:C5")) {
-            return "Mobotix";
+        // Search in the comprehensive MAC database
+        for (String[] entry : CAMERA_MAC_DATABASE) {
+            if (prefix.startsWith(entry[0])) {
+                return entry[1];
+            }
         }
         
-        return null;
+        return "Unknown";
     }
     
     /**
@@ -761,101 +844,173 @@ public class CameraDetector {
         }
         
         private void scanIpForCameras(String ipAddress) {
-            // First try common camera ports
-            for (int port : CAMERA_PORTS) {
+            // First scan primary camera ports (most likely to be cameras)
+            CameraInfo detectedCamera = scanPortsForCamera(ipAddress, PRIMARY_CAMERA_PORTS, true);
+            
+            if (detectedCamera != null) {
+                publishProgress(detectedCamera);
+                return; // Found a camera, no need to scan secondary ports
+            }
+            
+            // If no camera found on primary ports, try secondary ports
+            detectedCamera = scanPortsForCamera(ipAddress, SECONDARY_CAMERA_PORTS, false);
+            
+            if (detectedCamera != null) {
+                publishProgress(detectedCamera);
+            }
+        }
+        
+        private CameraInfo scanPortsForCamera(String ipAddress, int[] ports, boolean isPrimary) {
+            for (int port : ports) {
                 try {
                     Socket socket = new Socket();
-                    socket.connect(new InetSocketAddress(ipAddress, port), 1500);
+                    socket.connect(new InetSocketAddress(ipAddress, port), isPrimary ? 2000 : 1000);
                     socket.close();
                     
-                    // Found open port, create camera info
-                    CameraInfo cameraInfo = new CameraInfo();
-                    cameraInfo.setId(ipAddress + ":" + port);
-                    cameraInfo.setName("Network Camera (" + ipAddress + ":" + port + ")");
-                    cameraInfo.setType(CameraInfo.CameraType.NETWORK);
-                    cameraInfo.setIpAddress(ipAddress);
-                    cameraInfo.setPort(port);
-                    cameraInfo.setAccessible(true);
-                    cameraInfo.setHasPermission(false);
-                    cameraInfo.setDescription("Found open port " + port + ", likely a camera device");
+                    // Port is open, now verify if it's actually a camera
+                    CameraInfo cameraInfo = verifyAndCreateCameraInfo(ipAddress, port);
                     
-                    // Try to detect camera type and get more info
-                    enhanceCameraInfo(cameraInfo);
-                    
-                    publishProgress(cameraInfo);
-                    
-                    // Found one port, break to avoid duplicate detections
-                    break;
+                    if (cameraInfo != null) {
+                        return cameraInfo; // Found a verified camera
+                    }
                     
                 } catch (IOException e) {
                     // Port not reachable, continue to next
                 }
             }
+            return null;
         }
         
-        /**
-         * Try to enhance camera information by checking HTTP response
-         */
-        private void enhanceCameraInfo(CameraInfo cameraInfo) {
-            String ipAddress = cameraInfo.getIpAddress();
-            int port = cameraInfo.getPort();
+        private CameraInfo verifyAndCreateCameraInfo(String ipAddress, int port) {
+            // Try to verify this is actually a camera by checking HTTP responses
+            boolean isCameraVerified = false;
+            String detectedManufacturer = null;
+            String deviceName = null;
+            boolean requiresAuth = false;
             
-            // Try to get more info about the camera by checking HTTP headers
-            for (String path : CAMERA_HTTP_PATHS) {
+            for (String path : CAMERA_DETECTION_PATHS) {
                 try {
                     URL url = new URL("http://" + ipAddress + ":" + port + path);
                     HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                    connection.setConnectTimeout(1500);
-                    connection.setReadTimeout(1500);
+                    connection.setConnectTimeout(3000);
+                    connection.setReadTimeout(3000);
                     connection.setRequestMethod("HEAD");
+                    connection.setRequestProperty("User-Agent", "Camera-Detector/1.0");
                     
                     int responseCode = connection.getResponseCode();
                     
+                    // Check for camera-specific responses
                     if (responseCode == HttpURLConnection.HTTP_OK || 
-                        responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                        responseCode == HttpURLConnection.HTTP_UNAUTHORIZED ||
+                        responseCode == HttpURLConnection.HTTP_FORBIDDEN) {
                         
-                        // Check for camera-specific headers
+                        // Check server header for camera signatures
                         String server = connection.getHeaderField("Server");
+                        String contentType = connection.getHeaderField("Content-Type");
+                        String wwwAuth = connection.getHeaderField("WWW-Authenticate");
+                        
                         if (server != null) {
-                            if (server.toLowerCase().contains("hikvision")) {
-                                cameraInfo.setManufacturer("Hikvision");
-                                cameraInfo.setName("Hikvision Camera (" + ipAddress + ")");
-                            } else if (server.toLowerCase().contains("dahua")) {
-                                cameraInfo.setManufacturer("Dahua");
-                                cameraInfo.setName("Dahua Camera (" + ipAddress + ")");
-                            } else if (server.toLowerCase().contains("axis")) {
-                                cameraInfo.setManufacturer("Axis");
-                                cameraInfo.setName("Axis Camera (" + ipAddress + ")");
-                            } else {
-                                cameraInfo.setDescription(cameraInfo.getDescription() + "\nServer: " + server);
+                            server = server.toLowerCase();
+                            for (String signature : CAMERA_SERVER_SIGNATURES) {
+                                if (server.contains(signature)) {
+                                    isCameraVerified = true;
+                                    detectedManufacturer = extractManufacturerFromServer(server);
+                                    break;
+                                }
                             }
                         }
                         
-                        // Try to get authentication type
-                        String auth = connection.getHeaderField("WWW-Authenticate");
-                        if (auth != null) {
-                            cameraInfo.setDescription(cameraInfo.getDescription() + 
-                                                     "\nRequires authentication: " + auth);
+                        // Check for camera-specific content types
+                        if (contentType != null && (
+                            contentType.contains("image/jpeg") ||
+                            contentType.contains("multipart/x-mixed-replace") ||
+                            contentType.contains("video/") ||
+                            contentType.contains("application/soap+xml"))) {
+                            isCameraVerified = true;
                         }
                         
-                        // Set permission status based on auth requirement
+                        // Check for ONVIF or camera-specific authentication
+                        if (wwwAuth != null && (
+                            wwwAuth.contains("ONVIF") ||
+                            wwwAuth.contains("Camera") ||
+                            wwwAuth.contains("DVR") ||
+                            wwwAuth.contains("NVR"))) {
+                            isCameraVerified = true;
+                            requiresAuth = true;
+                        }
+                        
+                        // Special handling for ONVIF endpoints
+                        if (path.contains("onvif")) {
+                            isCameraVerified = true;
+                            deviceName = "ONVIF Camera";
+                        }
+                        
                         if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
-                            cameraInfo.setHasPermission(false);
-                        } else {
-                            // If we can access without auth, consider it as having permission
-                            cameraInfo.setHasPermission(true);
+                            requiresAuth = true;
                         }
-                        
-                        break;
                     }
                     
                     connection.disconnect();
                     
+                    if (isCameraVerified) {
+                        break; // Found camera evidence, no need to check more paths
+                    }
+                    
                 } catch (Exception e) {
-                    // Failed to get additional info, continue
+                    // Continue to next path
                 }
             }
+            
+            // Only create camera info if we have strong evidence this is a camera
+            if (isCameraVerified) {
+                CameraInfo cameraInfo = new CameraInfo();
+                cameraInfo.setId(ipAddress + ":" + port);
+                cameraInfo.setIpAddress(ipAddress);
+                cameraInfo.setPort(port);
+                cameraInfo.setType(CameraInfo.CameraType.NETWORK);
+                cameraInfo.setAccessible(true);
+                cameraInfo.setHasPermission(!requiresAuth);
+                
+                // Set name based on detected info
+                if (deviceName != null) {
+                    cameraInfo.setName(deviceName + " (" + ipAddress + ")");
+                } else if (detectedManufacturer != null) {
+                    cameraInfo.setName(detectedManufacturer + " Camera (" + ipAddress + ")");
+                } else {
+                    cameraInfo.setName("IP Camera (" + ipAddress + ":" + port + ")");
+                }
+                
+                if (detectedManufacturer != null) {
+                    cameraInfo.setManufacturer(detectedManufacturer);
+                }
+                
+                String description = "Verified camera device on port " + port;
+                if (requiresAuth) {
+                    description += " (requires authentication)";
+                }
+                cameraInfo.setDescription(description);
+                
+                return cameraInfo;
+            }
+            
+            return null; // Not verified as a camera
         }
+        
+        private String extractManufacturerFromServer(String server) {
+            server = server.toLowerCase();
+            if (server.contains("hikvision")) return "Hikvision";
+            if (server.contains("dahua")) return "Dahua";
+            if (server.contains("axis")) return "Axis";
+            if (server.contains("vivotek")) return "Vivotek";
+            if (server.contains("mobotix")) return "Mobotix";
+            if (server.contains("bosch")) return "Bosch";
+            if (server.contains("pelco")) return "Pelco";
+            if (server.contains("panasonic")) return "Panasonic";
+            if (server.contains("sony")) return "Sony";
+            if (server.contains("samsung")) return "Samsung";
+            return "Unknown";
+        }
+        
     }
     
     public void destroy() {
