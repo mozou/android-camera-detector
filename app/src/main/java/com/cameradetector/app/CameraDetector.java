@@ -153,67 +153,6 @@ public class CameraDetector {
     }
     
     /**
-     * Start comprehensive scanning for camera devices
-     */
-    public void startComprehensiveScan(OnCameraDetectedListener listener) {
-        listener.onScanProgress("Starting to scan for camera devices...");
-        
-        // Reset scan completion tracking
-        activeScanCount.set(7); // WiFi, Network, Bluetooth, UPnP, Broadcast, Public IP, Hotspot
-        scanCompleteNotified = false;
-        
-        // Use thread pool to run scans in parallel for better efficiency
-        executorService.execute(() -> {
-            // 1. Scan for cameras in WiFi networks
-            scanWifiCameras(listener);
-            checkScanCompletion(listener);
-        });
-        
-        executorService.execute(() -> {
-            // 2. Scan for network cameras in local network
-            scanNetworkCameras(listener);
-            checkScanCompletion(listener);
-        });
-        
-        executorService.execute(() -> {
-            // 3. Scan for Bluetooth cameras
-            scanBluetoothCameras(listener);
-            checkScanCompletion(listener);
-        });
-        
-        executorService.execute(() -> {
-            // 4. Scan for UPnP devices
-            scanUPnPCameras(listener);
-            checkScanCompletion(listener);
-        });
-        
-        executorService.execute(() -> {
-            // 5. Scan for cameras via broadcast discovery
-            scanBroadcastCameras(listener);
-            checkScanCompletion(listener);
-        });
-        
-        executorService.execute(() -> {
-            // 6. Scan for cameras on public/external networks
-            scanPublicNetworkCameras(listener);
-            checkScanCompletion(listener);
-        });
-        
-        executorService.execute(() -> {
-            // 7. Scan for camera hotspots (cameras creating their own WiFi)
-            scanCameraHotspots(listener);
-            checkScanCompletion(listener);
-        });
-        
-        // Set a timeout to ensure scan completion is reported even if some scans hang
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!scanCompleteNotified) {
-                listener.onScanProgress("Scan timeout reached, finalizing results");
-                listener.onScanComplete();
-                scanCompleteNotified = true;
-            }
-        }, 90000); // 90 second timeout for extended scanning
-    }
     
     /**
      * Check if all scans are complete and notify listener
@@ -319,12 +258,43 @@ public class CameraDetector {
     }
     
     /**
+    /**
      * Scan for network cameras (enhanced version)
      */
     public void scanNetworkCameras(OnCameraDetectedListener listener) {
         listener.onScanProgress("Scanning for network cameras...");
         new EnhancedNetworkCameraScanTask(listener).execute();
     }
+    
+    /**
+     * Scan for Bluetooth cameras
+     */
+    public void scanBluetoothCameras(OnCameraDetectedListener listener) {
+        if (bluetoothAdapter == null) {
+            listener.onScanProgress("Bluetooth adapter not available");
+            return;
+        }
+        
+        if (!bluetoothAdapter.isEnabled()) {
+            listener.onScanProgress("Bluetooth not enabled");
+            return;
+        }
+        
+        listener.onScanProgress("Scanning for Bluetooth cameras...");
+        
+        try {
+            // Scan paired Bluetooth devices
+            Set<BluetoothDevice> pairedDevices = bluetoothAdapter.getBondedDevices();
+            for (BluetoothDevice device : pairedDevices) {
+                if (isCameraDevice(device)) {
+                    CameraInfo cameraInfo = createBluetoothCameraInfo(device);
+                    listener.onCameraDetected(cameraInfo);
+                }
+            }
+        } catch (SecurityException e) {
+            Log.e(TAG, "No Bluetooth permissions", e);
+            listener.onScanProgress("Missing Bluetooth permissions, cannot get paired devices");
+        }
     
     /**
      * Start comprehensive scanning for camera devices
