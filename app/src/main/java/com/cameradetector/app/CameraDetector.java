@@ -159,6 +159,12 @@ public class CameraDetector {
         }
     }
     
+    public void destroy() {
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdown();
+        }
+    }
+}
     /**
      * Scan for cameras in WiFi networks
      */
