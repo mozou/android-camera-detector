@@ -284,6 +284,21 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
             }
+            
+            @Override
+            public void onProgressUpdate(int current, int total, String currentTask) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (total > 0) {
+                            int progress = (int) ((current * 100.0) / total);
+                            updateScanProgress(currentTask, progress);
+                        } else {
+                            updateScanProgress(currentTask, -1);
+                        }
+                    }
+                });
+            }
         });
     }
     
