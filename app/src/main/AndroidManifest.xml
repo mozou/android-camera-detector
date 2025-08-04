@@ -2,10 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     package="com.cameradetector.app">
-<?xml version="1.0" encoding="utf-8"?>
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.cameradetector.app">
 
     <!-- Camera permissions -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -26,120 +22,6 @@
     
     <!-- Android 12+ specific Bluetooth permissions -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    
-    <!-- Post notifications permission for Android 13+ -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.cameradetector.app">
-<?xml version="1.0" encoding="utf-8"?>
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.cameradetector.app">
-
-    <!-- Camera permissions -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    
-    <!-- Network permissions for detecting network cameras -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    
-    <!-- Location permissions for detecting nearby devices -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    
-    <!-- Bluetooth permissions for detecting Bluetooth camera devices -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    
-    <!-- Android 12+ specific Bluetooth permissions -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    package="com.cameradetector.app">
-<?xml version="1.0" encoding="utf-8"?>
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.cameradetector.app">
-
-    <!-- Camera permissions -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    
-    <!-- Network permissions for detecting network cameras -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    
-    <!-- Location permissions for detecting nearby devices -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    
-    <!-- Bluetooth permissions for detecting Bluetooth camera devices -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    
-    <!-- Android 12+ specific Bluetooth permissions -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    
-    <!-- Post notifications permission for Android 13+ -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    
-    <!-- Add tools namespace to handle newer permissions gracefully -->
-    <uses-sdk xmlns:tools="http://schemas.android.com/tools"
-        tools:overrideLibrary="android.support.v7.appcompat" />
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.cameradetector.app">
-
-    <!-- Camera permissions -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    
-    <!-- Network permissions for detecting network cameras -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    
-    <!-- Location permissions for detecting nearby devices -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    
-    <!-- Bluetooth permissions for detecting Bluetooth camera devices -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.cameradetector.app">
-
-    <!-- Camera permissions -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    
-    <!-- Network permissions for detecting network cameras -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    
-    <!-- Location permissions for detecting nearby devices -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    
-    <!-- Bluetooth permissions for detecting Bluetooth camera devices -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    
-    <!-- Android 12+ specific Bluetooth permissions -->
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     
     <!-- Post notifications permission for Android 13+ -->
