@@ -1,27 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">摄像头检测器</string>
     <string name="scan_cameras">扫描摄像头</string>
     <string name="control_cameras">控制摄像头</string>
     <string name="camera_count">检测到 %d 个摄像头设备</string>
-    <string name="no_cameras_found">未检测到摄像头设备</string>
     <string name="scanning">正在扫描...</string>
-    <string name="scan_complete">扫描完成</string>
-    <string name="permission_required">需要权限才能检测摄像头设备</string>
-    <string name="camera_accessible">可访问</string>
-    <string name="camera_not_accessible">不可访问</string>
-    <string name="camera_controllable">可控制</string>
-    <string name="local_camera">本地摄像头</string>
-    <string name="network_camera">网络摄像头</string>
-    <string name="bluetooth_camera">蓝牙摄像头</string>
-    <string name="front_camera">前置摄像头</string>
-    <string name="back_camera">后置摄像头</string>
-    <string name="external_camera">外部摄像头</string>
-    <string name="unknown_camera">未知摄像头</string>
-    <string name="block_camera">阻止访问</string>
-    <string name="unblock_camera">恢复访问</string>
-    <string name="test_access">测试访问</string>
-    <string name="camera_blocked">摄像头访问已阻止</string>
-    <string name="camera_unblocked">摄像头访问已恢复</string>
-    <string name="operation_failed">操作失败</string>
-    <string name="root_required">某些功能需要root权限</string>
+    <string name="scan_complete">扫描完成，发现 %d 个摄像头</string>
+    <string name="no_cameras_found">未检测到摄像头</string>
+    <string name="camera_info">摄像头信息</string>
+    <string name="connect_camera">连接摄像头</string>
+    <string name="username_hint">用户名 (默认: admin)</string>
+    <string name="password_hint">密码 (默认: admin)</string>
+    <string name="camera_control">摄像头控制</string>
+    <string name="pan_left">左移</string>
+    <string name="pan_right">右移</string>
+    <string name="tilt_up">上移</string>
+    <string name="tilt_down">下移</string>
+    <string name="zoom_in">放大</string>
+    <string name="zoom_out">缩小</string>
+    <string name="snapshot">截图</string>
 </resources>

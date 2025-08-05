@@ -3,9 +3,6 @@ package com.cameradetector.app;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraManager;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Button;
@@ -22,373 +19,179 @@ import androidx.core.content.ContextCompat;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements CameraDetector.OnCameraDetectedListener {
+
+    private static final int PERMISSION_REQUEST_CODE = 100;
+    private static final String[] REQUIRED_PERMISSIONS = {
+            Manifest.permission.INTERNET,
+            Manifest.permission.ACCESS_NETWORK_STATE,
+            Manifest.permission.ACCESS_WIFI_STATE,
+            Manifest.permission.ACCESS_FINE_LOCATION
+    };
+
+    private CameraDetector cameraDetector;
+    private List<CameraInfo> detectedCameras = new ArrayList<>();
+    private CameraListAdapter cameraListAdapter;
     
-    private static final int PERMISSION_REQUEST_CODE = 1001;
-    private TextView tvCameraCount;
-    private ListView lvCameraList;
     private Button btnScanCameras;
     private Button btnControlCameras;
     private ProgressBar progressBar;
+    private TextView tvCameraCount;
     private TextView tvScanStatus;
     private TextView tvScanProgress;
-    
-    private CameraManager cameraManager;
-    private CameraDetector cameraDetector;
-    private CameraExploiter cameraExploiter;
-    private CameraListAdapter cameraAdapter;
-    private List<CameraInfo> detectedCameras;
-    
+    private ListView lvCameraList;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         
         initViews();
-        initCameraManager();
-        requestPermissions();
+        setupListeners();
+        
+        cameraDetector = new CameraDetector(this);
     }
     
     private void initViews() {
-        tvCameraCount = findViewById(R.id.tv_camera_count);
-        lvCameraList = findViewById(R.id.lv_camera_list);
         btnScanCameras = findViewById(R.id.btn_scan_cameras);
         btnControlCameras = findViewById(R.id.btn_control_cameras);
         progressBar = findViewById(R.id.progress_bar);
+        tvCameraCount = findViewById(R.id.tv_camera_count);
         tvScanStatus = findViewById(R.id.tv_scan_status);
         tvScanProgress = findViewById(R.id.tv_scan_progress);
+        lvCameraList = findViewById(R.id.lv_camera_list);
         
-        detectedCameras = new ArrayList<>();
-        cameraAdapter = new CameraListAdapter(this, detectedCameras);
-        lvCameraList.setAdapter(cameraAdapter);
+        cameraListAdapter = new CameraListAdapter(this, detectedCameras);
+        lvCameraList.setAdapter(cameraListAdapter);
         
-        // Initialize progress UI
+        // 初始状态
+        btnControlCameras.setEnabled(false);
         progressBar.setVisibility(View.GONE);
         tvScanStatus.setVisibility(View.GONE);
         tvScanProgress.setVisibility(View.GONE);
-        
-        btnScanCameras.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                scanForCameras();
+    }
+    
+    private void setupListeners() {
+        btnScanCameras.setOnClickListener(v -> {
+            if (checkPermissions()) {
+                startScan();
+            } else {
+                requestPermissions();
             }
         });
         
-        btnControlCameras.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
+        btnControlCameras.setOnClickListener(v -> {
+            if (!detectedCameras.isEmpty()) {
                 openCameraControl();
             }
         });
+        
+        lvCameraList.setOnItemClickListener((parent, view, position, id) -> {
+            CameraInfo selectedCamera = detectedCameras.get(position);
+            openCameraDetail(selectedCamera);
+        });
     }
     
-    private void initCameraManager() {
-        cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
-        cameraDetector = new CameraDetector(this);
-        cameraExploiter = new CameraExploiter();
+    private boolean checkPermissions() {
+        for (String permission : REQUIRED_PERMISSIONS) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                return false;
+            }
+        }
+        return true;
     }
     
     private void requestPermissions() {
-        // Create separate permission groups for better user experience
-        List<String> basicPermissions = new ArrayList<>();
-        List<String> locationPermissions = new ArrayList<>();
-        List<String> bluetoothPermissions = new ArrayList<>();
-        
-        // Basic permissions
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            basicPermissions.add(Manifest.permission.CAMERA);
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET) != PackageManager.PERMISSION_GRANTED) {
-            basicPermissions.add(Manifest.permission.INTERNET);
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_NETWORK_STATE) != PackageManager.PERMISSION_GRANTED) {
-            basicPermissions.add(Manifest.permission.ACCESS_NETWORK_STATE);
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
-            basicPermissions.add(Manifest.permission.ACCESS_WIFI_STATE);
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CHANGE_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
-            basicPermissions.add(Manifest.permission.CHANGE_WIFI_STATE);
-        }
-        
-        // Location permissions
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            locationPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            locationPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        }
-        
-        // Bluetooth permissions with Android version check
-        if (android.os.Build.VERSION.SDK_INT >= 31) { // VERSION_CODES.S = 31
-            // Android 12+ specific Bluetooth permissions
-            if (ContextCompat.checkSelfPermission(this, "android.permission.BLUETOOTH_SCAN") != PackageManager.PERMISSION_GRANTED) {
-                bluetoothPermissions.add("android.permission.BLUETOOTH_SCAN");
-            }
-            if (ContextCompat.checkSelfPermission(this, "android.permission.BLUETOOTH_CONNECT") != PackageManager.PERMISSION_GRANTED) {
-                bluetoothPermissions.add("android.permission.BLUETOOTH_CONNECT");
-            }
-        } else {
-            // Older Android versions
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
-                bluetoothPermissions.add(Manifest.permission.BLUETOOTH);
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
-                bluetoothPermissions.add(Manifest.permission.BLUETOOTH_ADMIN);
-            }
-        }
-        
-        // Request permissions in sequence for better user experience
-        if (!basicPermissions.isEmpty()) {
-            ActivityCompat.requestPermissions(this, 
-                basicPermissions.toArray(new String[0]), 
-                PERMISSION_REQUEST_CODE);
-        } else if (!locationPermissions.isEmpty()) {
-            ActivityCompat.requestPermissions(this, 
-                locationPermissions.toArray(new String[0]), 
-                PERMISSION_REQUEST_CODE + 1);
-        } else if (!bluetoothPermissions.isEmpty()) {
-            ActivityCompat.requestPermissions(this, 
-                bluetoothPermissions.toArray(new String[0]), 
-                PERMISSION_REQUEST_CODE + 2);
-        } else {
-            // All permissions granted, start scanning
-            scanForCameras();
-        }
+        ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, PERMISSION_REQUEST_CODE);
     }
     
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, 
-                                         @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         
-        if (requestCode >= PERMISSION_REQUEST_CODE && requestCode <= PERMISSION_REQUEST_CODE + 2) {
-            boolean allPermissionsGranted = true;
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            boolean allGranted = true;
+            
             for (int result : grantResults) {
                 if (result != PackageManager.PERMISSION_GRANTED) {
-                    allPermissionsGranted = false;
+                    allGranted = false;
                     break;
                 }
             }
             
-            if (allPermissionsGranted) {
-                // Continue with permission sequence
-                if (requestCode == PERMISSION_REQUEST_CODE) {
-                    // Basic permissions granted, request location
-                    List<String> locationPermissions = new ArrayList<>();
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                        locationPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
-                    }
-                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                        locationPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-                    }
-                    
-                    if (!locationPermissions.isEmpty()) {
-                        ActivityCompat.requestPermissions(this, 
-                            locationPermissions.toArray(new String[0]), 
-                            PERMISSION_REQUEST_CODE + 1);
-                        return;
-                    }
-                }
-                
-                if (requestCode == PERMISSION_REQUEST_CODE || requestCode == PERMISSION_REQUEST_CODE + 1) {
-                    // Location permissions granted, request bluetooth
-                    List<String> bluetoothPermissions = new ArrayList<>();
-                    
-                    if (android.os.Build.VERSION.SDK_INT >= 31) { // VERSION_CODES.S = 31
-                        if (ContextCompat.checkSelfPermission(this, "android.permission.BLUETOOTH_SCAN") != PackageManager.PERMISSION_GRANTED) {
-                            bluetoothPermissions.add("android.permission.BLUETOOTH_SCAN");
-                        }
-                        if (ContextCompat.checkSelfPermission(this, "android.permission.BLUETOOTH_CONNECT") != PackageManager.PERMISSION_GRANTED) {
-                            bluetoothPermissions.add("android.permission.BLUETOOTH_CONNECT");
-                        }
-                    } else {
-                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
-                            bluetoothPermissions.add(Manifest.permission.BLUETOOTH);
-                        }
-                        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
-                            bluetoothPermissions.add(Manifest.permission.BLUETOOTH_ADMIN);
-                        }
-                    }
-                    
-                    if (!bluetoothPermissions.isEmpty()) {
-                        ActivityCompat.requestPermissions(this, 
-                            bluetoothPermissions.toArray(new String[0]), 
-                            PERMISSION_REQUEST_CODE + 2);
-                        return;
-                    }
-                }
-                
-                // All permission sequences completed
-                Toast.makeText(this, "权限已获取，开始扫描摄像头", Toast.LENGTH_SHORT).show();
-                scanForCameras();
+            if (allGranted) {
+                startScan();
             } else {
-                // Some permissions were denied
-                if (requestCode == PERMISSION_REQUEST_CODE) {
-                    // Basic permissions denied - critical, show explanation
-                    new androidx.appcompat.app.AlertDialog.Builder(this)
-                        .setTitle("需要基本权限")
-                        .setMessage("摄像头和网络权限是应用程序正常工作所必需的。请授予这些权限以继续。")
-                        .setPositiveButton("重试", (dialog, which) -> requestPermissions())
-                        .setNegativeButton("取消", (dialog, which) -> Toast.makeText(this, "应用功能将受限", Toast.LENGTH_LONG).show())
-                        .show();
-                } else {
-                    // Non-critical permissions, continue with limited functionality
-                    Toast.makeText(this, "部分功能可能受限，但将尝试扫描可用设备", Toast.LENGTH_LONG).show();
-                    scanForCameras();
-                }
+                Toast.makeText(this, "需要所有权限才能扫描摄像头", Toast.LENGTH_SHORT).show();
             }
         }
     }
     
-    private void scanForCameras() {
+    private void startScan() {
         detectedCameras.clear();
+        cameraListAdapter.notifyDataSetChanged();
         
-        // Show progress UI
-        showScanProgress();
-        
-        // 检测本地摄像头
-        scanLocalCameras();
-        
-        // 开始全面扫描
-        cameraDetector.startComprehensiveScan(new CameraDetector.OnCameraDetectedListener() {
-            @Override
-            public void onCameraDetected(CameraInfo cameraInfo) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        detectedCameras.add(cameraInfo);
-                        updateCameraList();
-                        updateScanProgress("发现设备: " + cameraInfo.getName(), -1);
-                    }
-                });
-            }
-            
-            @Override
-            public void onScanComplete() {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        hideScanProgress();
-                        Toast.makeText(MainActivity.this, "扫描完成！共发现 " + detectedCameras.size() + " 个设备", Toast.LENGTH_LONG).show();
-                    }
-                });
-            }
-            
-            @Override
-            public void onScanProgress(String status) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        updateScanProgress(status, -1);
-                    }
-                });
-            }
-            
-            @Override
-            public void onProgressUpdate(int current, int total, String currentTask) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (total > 0) {
-                            int progress = (int) ((current * 100.0) / total);
-                            updateScanProgress(currentTask, progress);
-                        } else {
-                            updateScanProgress(currentTask, -1);
-                        }
-                    }
-                });
-            }
-        });
-    }
-    
-    private void showScanProgress() {
+        btnScanCameras.setEnabled(false);
+        btnControlCameras.setEnabled(false);
         progressBar.setVisibility(View.VISIBLE);
         tvScanStatus.setVisibility(View.VISIBLE);
         tvScanProgress.setVisibility(View.VISIBLE);
+        tvScanStatus.setText("正在扫描...");
+        tvScanProgress.setText("");
+        tvCameraCount.setText("检测到 0 个摄像头设备");
         
-        progressBar.setIndeterminate(true);
-        tvScanStatus.setText("正在扫描摄像头设备...");
-        tvScanProgress.setText("准备开始扫描");
-        
-        btnScanCameras.setEnabled(false);
-        btnScanCameras.setText("扫描中...");
-    }
-    
-    private void hideScanProgress() {
-        progressBar.setVisibility(View.GONE);
-        tvScanStatus.setVisibility(View.GONE);
-        tvScanProgress.setVisibility(View.GONE);
-        
-        btnScanCameras.setEnabled(true);
-        btnScanCameras.setText("扫描摄像头");
-    }
-    
-    private void updateScanProgress(String status, int progress) {
-        tvScanProgress.setText(status);
-        
-        if (progress >= 0) {
-            progressBar.setIndeterminate(false);
-            progressBar.setProgress(progress);
-        } else {
-            progressBar.setIndeterminate(true);
-        }
-    }
-    
-    private void scanLocalCameras() {
-        try {
-            String[] cameraIds = cameraManager.getCameraIdList();
-            
-            for (String cameraId : cameraIds) {
-                CameraCharacteristics characteristics = 
-                    cameraManager.getCameraCharacteristics(cameraId);
-                
-                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
-                String cameraType = "未知";
-                
-                if (facing != null) {
-                    switch (facing) {
-                        case CameraCharacteristics.LENS_FACING_FRONT:
-                            cameraType = "前置摄像头";
-                            break;
-                        case CameraCharacteristics.LENS_FACING_BACK:
-                            cameraType = "后置摄像头";
-                            break;
-                        case CameraCharacteristics.LENS_FACING_EXTERNAL:
-                            cameraType = "外部摄像头";
-                            break;
-                    }
-                }
-                
-                CameraInfo cameraInfo = new CameraInfo();
-                cameraInfo.setId(cameraId);
-                cameraInfo.setName("本地" + cameraType);
-                cameraInfo.setType(CameraInfo.CameraType.LOCAL);
-                cameraInfo.setAccessible(true);
-                
-                detectedCameras.add(cameraInfo);
-            }
-            
-            updateCameraList();
-            
-        } catch (CameraAccessException e) {
-            Toast.makeText(this, "无法访问摄像头: " + e.getMessage(), 
-                         Toast.LENGTH_LONG).show();
-        }
-    }
-    
-    private void updateCameraList() {
-        tvCameraCount.setText("检测到 " + detectedCameras.size() + " 个摄像头设备");
-        cameraAdapter.notifyDataSetChanged();
-        
-        // 启用控制按钮
-        btnControlCameras.setEnabled(detectedCameras.size() > 0);
+        cameraDetector.startComprehensiveScan(this);
     }
     
     private void openCameraControl() {
         Intent intent = new Intent(this, CameraControlActivity.class);
-        intent.putParcelableArrayListExtra("cameras", 
-            (ArrayList<CameraInfo>) detectedCameras);
+        intent.putParcelableArrayListExtra("cameras", new ArrayList<>(detectedCameras));
         startActivity(intent);
+    }
+    
+    private void openCameraDetail(CameraInfo camera) {
+        Intent intent = new Intent(this, CameraControlActivity.class);
+        intent.putExtra("camera_info", camera);
+        startActivity(intent);
+    }
+    
+    @Override
+    public void onCameraDetected(CameraInfo cameraInfo) {
+        detectedCameras.add(cameraInfo);
+        cameraListAdapter.notifyDataSetChanged();
+        tvCameraCount.setText("检测到 " + detectedCameras.size() + " 个摄像头设备");
+    }
+    
+    @Override
+    public void onScanComplete() {
+        btnScanCameras.setEnabled(true);
+        btnControlCameras.setEnabled(!detectedCameras.isEmpty());
+        progressBar.setVisibility(View.GONE);
+        
+        if (detectedCameras.isEmpty()) {
+            tvScanStatus.setText("未检测到摄像头");
+        } else {
+            tvScanStatus.setText("扫描完成，发现 " + detectedCameras.size() + " 个摄像头");
+        }
+    }
+    
+    @Override
+    public void onScanProgress(String status) {
+        tvScanStatus.setText(status);
+    }
+    
+    @Override
+    public void onProgressUpdate(int current, int total, String currentTask) {
+        progressBar.setMax(total);
+        progressBar.setProgress(current);
+        tvScanProgress.setText(currentTask + " (" + current + "/" + total + ")");
+    }
+    
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (cameraDetector != null) {
+            cameraDetector.destroy();
+        }
     }
 }

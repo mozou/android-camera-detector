@@ -1,360 +1,336 @@
 package com.cameradetector.app;
 
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraManager;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.AdapterView;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.Button;
-import android.widget.ListView;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class CameraControlActivity extends AppCompatActivity {
     
-    private TextView tvSelectedCamera;
-    private ListView lvCameras;
-    private Button btnBlockCamera;
-    private Button btnUnblockCamera;
-    private Button btnTestAccess;
+    private TextView tvCameraInfo;
+    private WebView webViewCamera;
+    private EditText etUsername;
+    private EditText etPassword;
+    private Button btnConnect;
+    private Button btnPanLeft;
+    private Button btnPanRight;
+    private Button btnTiltUp;
+    private Button btnTiltDown;
+    private Button btnZoomIn;
+    private Button btnZoomOut;
+    private Button btnSnapshot;
+    private LinearLayout controlPanel;
+    private ProgressBar progressLoading;
     
-    private List<CameraInfo> cameraList;
-    private CameraListAdapter adapter;
     private CameraInfo selectedCamera;
-    private CameraManager cameraManager;
     private CameraController cameraController;
+    private String streamUrl;
+    private boolean controlMode;
     
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera_control);
         
+        // 获取传递的摄像头信息
+        selectedCamera = getIntent().getParcelableExtra("camera_info");
+        streamUrl = getIntent().getStringExtra("stream_url");
+        controlMode = getIntent().getBooleanExtra("control_mode", false);
+        
         initViews();
-        initData();
-        setupListeners();
+        
+        if (selectedCamera != null) {
+            setupCamera(streamUrl, controlMode);
+        } else {
+            Toast.makeText(this, "未选择摄像头", Toast.LENGTH_SHORT).show();
+            finish();
+        }
     }
     
     private void initViews() {
-        tvSelectedCamera = findViewById(R.id.tv_selected_camera);
-        lvCameras = findViewById(R.id.lv_cameras);
-        btnBlockCamera = findViewById(R.id.btn_block_camera);
-        btnUnblockCamera = findViewById(R.id.btn_unblock_camera);
-        btnTestAccess = findViewById(R.id.btn_test_access);
+        tvCameraInfo = findViewById(R.id.tv_camera_info);
+        webViewCamera = findViewById(R.id.webview_camera);
+        etUsername = findViewById(R.id.et_username);
+        etPassword = findViewById(R.id.et_password);
+        btnConnect = findViewById(R.id.btn_connect);
+        btnPanLeft = findViewById(R.id.btn_pan_left);
+        btnPanRight = findViewById(R.id.btn_pan_right);
+        btnTiltUp = findViewById(R.id.btn_tilt_up);
+        btnTiltDown = findViewById(R.id.btn_tilt_down);
+        btnZoomIn = findViewById(R.id.btn_zoom_in);
+        btnZoomOut = findViewById(R.id.btn_zoom_out);
+        btnSnapshot = findViewById(R.id.btn_snapshot);
+        controlPanel = findViewById(R.id.layout_control_panel);
+        progressLoading = findViewById(R.id.progress_loading);
         
-        // 初始状态下禁用控制按钮
-        btnBlockCamera.setEnabled(false);
-        btnUnblockCamera.setEnabled(false);
-        btnTestAccess.setEnabled(false);
+        // 设置WebView
+        WebSettings webSettings = webViewCamera.getSettings();
+        webSettings.setJavaScriptEnabled(true);
+        webSettings.setDomStorageEnabled(true);
+        webSettings.setLoadWithOverviewMode(true);
+        webSettings.setUseWideViewPort(true);
+        webSettings.setBuiltInZoomControls(true);
+        webSettings.setDisplayZoomControls(false);
+        webViewCamera.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                progressLoading.setVisibility(View.GONE);
+            }
+        });
+        
+        // 设置按钮点击事件
+        btnConnect.setOnClickListener(v -> connectToCamera());
+        
+        btnPanLeft.setOnClickListener(v -> {
+            if (cameraController != null) {
+                cameraController.sendCameraCommand(selectedCamera, "ptz_left");
+            }
+        });
+        
+        btnPanRight.setOnClickListener(v -> {
+            if (cameraController != null) {
+                cameraController.sendCameraCommand(selectedCamera, "ptz_right");
+            }
+        });
+        
+        btnTiltUp.setOnClickListener(v -> {
+            if (cameraController != null) {
+                cameraController.sendCameraCommand(selectedCamera, "ptz_up");
+            }
+        });
+        
+        btnTiltDown.setOnClickListener(v -> {
+            if (cameraController != null) {
+                cameraController.sendCameraCommand(selectedCamera, "ptz_down");
+            }
+        });
+        
+        btnZoomIn.setOnClickListener(v -> {
+            if (cameraController != null) {
+                cameraController.sendCameraCommand(selectedCamera, "zoom_in");
+            }
+        });
+        
+        btnZoomOut.setOnClickListener(v -> {
+            if (cameraController != null) {
+                cameraController.sendCameraCommand(selectedCamera, "zoom_out");
+            }
+        });
+        
+        btnSnapshot.setOnClickListener(v -> {
+            if (cameraController != null) {
+                takeSnapshot();
+            }
+        });
     }
     
-    private void initData() {
-        cameraList = getIntent().getParcelableArrayListExtra("cameras");
-        if (cameraList == null) {
-            cameraList = new ArrayList<>();
+    private void setupCamera(String streamUrl, boolean controlMode) {
+        // 显示摄像头信息
+        String cameraInfo = selectedCamera.getName() + " (" + selectedCamera.getTypeString() + ")";
+        if (selectedCamera.getType() == CameraInfo.CameraType.NETWORK && selectedCamera.getIpAddress() != null) {
+            cameraInfo += "\nIP: " + selectedCamera.getIpAddress();
+            if (selectedCamera.getPort() > 0) {
+                cameraInfo += ":" + selectedCamera.getPort();
+            }
         }
+        tvCameraInfo.setText(cameraInfo);
         
-        adapter = new CameraListAdapter(this, cameraList);
-        lvCameras.setAdapter(adapter);
-        
-        cameraManager = (CameraManager) getSystemService(CAMERA_SERVICE);
+        // 初始化控制器
         cameraController = new CameraController(this);
-    }
-    
-    private void setupListeners() {
-        lvCameras.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                selectedCamera = cameraList.get(position);
-                updateSelectedCameraInfo();
-                enableControlButtons();
-            }
-        });
         
-        btnBlockCamera.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                blockSelectedCamera();
-            }
-        });
+        // 设置控制面板可见性
+        controlPanel.setVisibility(controlMode ? View.VISIBLE : View.GONE);
         
-        btnUnblockCamera.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                unblockSelectedCamera();
-            }
-        });
+        // 如果提供了流URL，直接尝试连接
+        if (streamUrl != null && !streamUrl.isEmpty()) {
+            loadCameraStream(streamUrl);
+        } 
+        // 如果摄像头已经有权限，尝试自动连接
+        else if (selectedCamera.hasPermission()) {
+            connectToCamera();
+        }
+    }
+    
+    private void connectToCamera() {
+        String username = etUsername.getText().toString();
+        String password = etPassword.getText().toString();
         
-        btnTestAccess.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                testCameraAccess();
-            }
-        });
-    }
-    
-    private void updateSelectedCameraInfo() {
-        if (selectedCamera != null) {
-            String info = "已选择: " + selectedCamera.getName() + "\n" +
-                         "类型: " + selectedCamera.getTypeString() + "\n" +
-                         "状态: " + selectedCamera.getStatusString();
-            tvSelectedCamera.setText(info);
-        }
-    }
-    
-    private void enableControlButtons() {
-        if (selectedCamera != null) {
-            btnBlockCamera.setEnabled(true);
-            btnUnblockCamera.setEnabled(true);
-            btnTestAccess.setEnabled(true);
-        }
-    }
-    
-    private void blockSelectedCamera() {
-        if (selectedCamera == null) return;
+        // 如果用户名密码为空，使用默认值
+        if (username.isEmpty()) username = "admin";
+        if (password.isEmpty()) password = "admin";
         
-        new AlertDialog.Builder(this)
-            .setTitle("阻止摄像头访问")
-            .setMessage("确定要阻止对 " + selectedCamera.getName() + " 的访问吗？")
-            .setPositiveButton("确定", (dialog, which) -> {
-                performCameraBlock();
-            })
-            .setNegativeButton("取消", null)
-            .show();
-    }
-    
-    private void unblockSelectedCamera() {
-        if (selectedCamera == null) return;
+        progressLoading.setVisibility(View.VISIBLE);
         
-        new AlertDialog.Builder(this)
-            .setTitle("恢复摄像头访问")
-            .setMessage("确定要恢复对 " + selectedCamera.getName() + " 的访问吗？")
-            .setPositiveButton("确定", (dialog, which) -> {
-                performCameraUnblock();
-            })
-            .setNegativeButton("取消", null)
-            .show();
-    }
-    
-    private void performCameraBlock() {
-        switch (selectedCamera.getType()) {
-            case LOCAL:
-                blockLocalCamera();
-                break;
-            case NETWORK:
-                blockNetworkCamera();
-                break;
-            case BLUETOOTH:
-                blockBluetoothCamera();
-                break;
-        }
-    }
-    
-    private void performCameraUnblock() {
-        switch (selectedCamera.getType()) {
-            case LOCAL:
-                unblockLocalCamera();
-                break;
-            case NETWORK:
-                unblockNetworkCamera();
-                break;
-            case BLUETOOTH:
-                unblockBluetoothCamera();
-                break;
-        }
-    }
-    
-    private void blockLocalCamera() {
-        try {
-            // 注意：Android系统不允许应用直接禁用其他应用的摄像头权限
-            // 这里只能演示如何检测和提示用户手动操作
-            Toast.makeText(this, "本地摄像头需要通过系统设置手动禁用权限", Toast.LENGTH_LONG).show();
-            
-            // 可以引导用户到应用权限设置页面
-            cameraController.openAppPermissionSettings();
-            
-        } catch (Exception e) {
-            Toast.makeText(this, "操作失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
-    }
-    
-    private void unblockLocalCamera() {
-        Toast.makeText(this, "本地摄像头需要通过系统设置手动启用权限", Toast.LENGTH_LONG).show();
-        cameraController.openAppPermissionSettings();
-    }
-    
-    private void blockNetworkCamera() {
-        // 对于网络摄像头，可以尝试发送控制命令或阻止网络连接
-        boolean success = cameraController.blockNetworkCamera(selectedCamera);
-        if (success) {
-            Toast.makeText(this, "网络摄像头访问已阻止", Toast.LENGTH_SHORT).show();
-            selectedCamera.setAccessible(false);
-            adapter.notifyDataSetChanged();
-        } else {
-            Toast.makeText(this, "无法阻止网络摄像头访问", Toast.LENGTH_SHORT).show();
-        }
-    }
-    
-    private void unblockNetworkCamera() {
-        boolean success = cameraController.unblockNetworkCamera(selectedCamera);
-        if (success) {
-            Toast.makeText(this, "网络摄像头访问已恢复", Toast.LENGTH_SHORT).show();
-            selectedCamera.setAccessible(true);
-            adapter.notifyDataSetChanged();
-        } else {
-            Toast.makeText(this, "无法恢复网络摄像头访问", Toast.LENGTH_SHORT).show();
-        }
-    }
-    
-    private void blockBluetoothCamera() {
-        boolean success = cameraController.blockBluetoothCamera(selectedCamera);
-        if (success) {
-            Toast.makeText(this, "蓝牙摄像头连接已断开", Toast.LENGTH_SHORT).show();
-            selectedCamera.setAccessible(false);
-            adapter.notifyDataSetChanged();
-        } else {
-            Toast.makeText(this, "无法断开蓝牙摄像头连接", Toast.LENGTH_SHORT).show();
-        }
-    }
-    
-    private void unblockBluetoothCamera() {
-        boolean success = cameraController.unblockBluetoothCamera(selectedCamera);
-        if (success) {
-            Toast.makeText(this, "蓝牙摄像头连接已恢复", Toast.LENGTH_SHORT).show();
-            selectedCamera.setAccessible(true);
-            adapter.notifyDataSetChanged();
-        } else {
-            Toast.makeText(this, "无法恢复蓝牙摄像头连接", Toast.LENGTH_SHORT).show();
-        }
-    }
-    
-    private void testCameraAccess() {
-        if (selectedCamera == null) return;
-        
-        // Show progress dialog
-        AlertDialog progressDialog = new AlertDialog.Builder(this)
-            .setTitle("Testing Camera Access")
-            .setMessage("Testing access to " + selectedCamera.getName() + "...")
-            .setCancelable(false)
-            .create();
-        progressDialog.show();
-        
-        // Run test in background thread
-        new Thread(() -> {
-            final boolean hasAccess = cameraController.testCameraAccess(selectedCamera);
-            final boolean hasPermission = selectedCamera.hasPermission();
-            
-            // Update UI on main thread
-            runOnUiThread(() -> {
-                progressDialog.dismiss();
+        if (selectedCamera.getType() == CameraInfo.CameraType.NETWORK) {
+            // 尝试连接网络摄像头
+            new Thread(() -> {
+                // 设置凭据
+                selectedCamera.setUsername(username);
+                selectedCamera.setPassword(password);
                 
-                String accessStatus = hasAccess ? "accessible" : "not accessible";
-                String permissionStatus = hasPermission ? "has permission" : "no permission";
+                // 尝试获取流地址
+                String detectedStreamUrl = detectStreamUrl(selectedCamera);
                 
-                String message = "Camera " + selectedCamera.getName() + " is " + 
-                               accessStatus + " and " + permissionStatus;
-                
-                // Show detailed dialog with results
-                new AlertDialog.Builder(this)
-                    .setTitle("Camera Access Test Results")
-                    .setMessage(message)
-                    .setPositiveButton("OK", null)
-                    .setNeutralButton(hasAccess && !hasPermission ? "Request Permission" : null, 
-                        (dialog, which) -> requestCameraPermission())
-                    .show();
-                
-                // Update camera status in UI
-                adapter.notifyDataSetChanged();
-                updateSelectedCameraInfo();
-            });
-        }).start();
-    }
-    
-    private void requestCameraPermission() {
-        if (selectedCamera == null) return;
-        
-        // Show progress dialog
-        AlertDialog progressDialog = new AlertDialog.Builder(this)
-            .setTitle("Requesting Permission")
-            .setMessage("Attempting to get permission for " + selectedCamera.getName() + "...")
-            .setCancelable(false)
-            .create();
-        progressDialog.show();
-        
-        // Run in background thread
-        new Thread(() -> {
-            final boolean success = cameraController.requestCameraPermission(selectedCamera);
-            
-            // Update UI on main thread
-            runOnUiThread(() -> {
-                progressDialog.dismiss();
-                
-                if (success) {
-                    Toast.makeText(this, "Permission granted for " + selectedCamera.getName(), 
-                                 Toast.LENGTH_SHORT).show();
-                } else {
-                    // For local cameras or when permission requires user interaction
-                    if (selectedCamera.getType() == CameraInfo.CameraType.LOCAL) {
-                        new AlertDialog.Builder(this)
-                            .setTitle("Permission Required")
-                            .setMessage("This app needs camera permission to control the device. " +
-                                      "Please grant the permission in Settings.")
-                            .setPositiveButton("Open Settings", (dialog, which) -> 
-                                cameraController.openAppPermissionSettings())
-                            .setNegativeButton("Cancel", null)
-                            .show();
-                    } 
-                    // For network cameras that need authentication
-                    else if (selectedCamera.getType() == CameraInfo.CameraType.NETWORK) {
-                        showNetworkCameraLoginDialog();
+                runOnUiThread(() -> {
+                    if (detectedStreamUrl != null) {
+                        loadCameraStream(detectedStreamUrl);
+                    } else {
+                        progressLoading.setVisibility(View.GONE);
+                        Toast.makeText(this, "无法获取摄像头流地址，请检查凭据或网络连接", Toast.LENGTH_SHORT).show();
                     }
-                    // For Bluetooth cameras that need pairing
-                    else if (selectedCamera.getType() == CameraInfo.CameraType.BLUETOOTH) {
-                        Toast.makeText(this, "Please pair with this device in Bluetooth settings", 
-                                     Toast.LENGTH_LONG).show();
-                    }
+                });
+            }).start();
+        } else {
+            progressLoading.setVisibility(View.GONE);
+            Toast.makeText(this, "不支持的摄像头类型", Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    private String detectStreamUrl(CameraInfo camera) {
+        // 如果已经有流URL，直接返回
+        if (streamUrl != null && !streamUrl.isEmpty()) {
+            return streamUrl;
+        }
+        
+        // 尝试常见的流路径
+        String[] commonStreamPaths = {
+            "/video.mjpg",
+            "/mjpg/video.mjpg",
+            "/cgi-bin/mjpg/video.cgi",
+            "/videostream.cgi",
+            "/video/mjpg.cgi",
+            "/cgi-bin/camera",
+            "/snapshot.cgi",
+            "/image.jpg",
+            "/video.cgi",
+            "/live.html",
+            "/live/index.html",
+            "/live/view.html",
+            "/view/view.shtml",
+            "/index.html"
+        };
+        
+        String ipAddress = camera.getIpAddress();
+        int port = camera.getPort();
+        
+        // 尝试RTSP流
+        if (port == 554 || port == 8554 || port == 10554) {
+            String[] rtspPaths = {
+                "/live/main",
+                "/live/ch1/main",
+                "/live/ch01/main",
+                "/cam/realmonitor?channel=1&subtype=0",
+                "/h264/ch1/main/av_stream",
+                "/streaming/channels/1",
+                "/onvif1",
+                "/media/video1",
+                "/videoMain"
+            };
+            
+            for (String path : rtspPaths) {
+                String url = "rtsp://" + ipAddress + ":" + port + path;
+                // 注意：RTSP流无法在WebView中直接播放，需要使用专用播放器
+                // 这里只是检测URL是否有效
+                return url;  // 返回第一个RTSP URL，实际应用中应该检测有效性
+            }
+        }
+        
+        // 尝试HTTP流
+        for (String path : commonStreamPaths) {
+            String url = "http://" + ipAddress + ":" + port + path;
+            try {
+                java.net.HttpURLConnection connection = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                
+                // 如果有凭据，添加认证头
+                if (camera.getUsername() != null && !camera.getUsername().isEmpty()) {
+                    String auth = camera.getUsername() + ":" + camera.getPassword();
+                    String encodedAuth = android.util.Base64.encodeToString(auth.getBytes(), android.util.Base64.NO_WRAP);
+                    connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
                 }
                 
-                // Update camera status in UI
-                adapter.notifyDataSetChanged();
-                updateSelectedCameraInfo();
-            });
-        }).start();
+                connection.setConnectTimeout(2000);
+                connection.setReadTimeout(2000);
+                
+                int responseCode = connection.getResponseCode();
+                String contentType = connection.getContentType();
+                
+                if (responseCode == 200) {
+                    if (contentType != null && (
+                        contentType.startsWith("image/") || 
+                        contentType.startsWith("video/") || 
+                        contentType.startsWith("multipart/") ||
+                        contentType.contains("mjpeg") ||
+                        contentType.contains("html"))) {
+                        return url;
+                    }
+                }
+            } catch (Exception e) {
+                // 继续尝试下一个路径
+            }
+        }
+        
+        // 如果所有尝试都失败，返回null
+        return null;
     }
     
-    private void showNetworkCameraLoginDialog() {
-        // Create dialog with username/password fields
-        final android.view.View dialogView = getLayoutInflater().inflate(
-            android.R.layout.simple_list_item_2, null);
-        
-        final android.widget.TextView usernameView = dialogView.findViewById(android.R.id.text1);
-        final android.widget.TextView passwordView = dialogView.findViewById(android.R.id.text2);
-        
-        usernameView.setHint("Username (default: admin)");
-        passwordView.setHint("Password (default: admin)");
+    private void loadCameraStream(String url) {
+        if (url.startsWith("rtsp://")) {
+            // RTSP流需要特殊处理
+            showRtspStreamDialog(url);
+        } else {
+            // HTTP流可以直接在WebView中加载
+            webViewCamera.loadUrl(url);
+            progressLoading.setVisibility(View.GONE);
+        }
+    }
+    
+    private void showRtspStreamDialog(String rtspUrl) {
+        progressLoading.setVisibility(View.GONE);
         
         new AlertDialog.Builder(this)
-            .setTitle("Camera Login")
-            .setMessage("Enter credentials for " + selectedCamera.getName())
-            .setView(dialogView)
-            .setPositiveButton("Login", (dialog, which) -> {
-                String username = usernameView.getText().toString();
-                String password = passwordView.getText().toString();
-                
-                // Use default values if empty
-                if (username.isEmpty()) username = "admin";
-                if (password.isEmpty()) password = "admin";
-                
-                // TODO: Implement network camera authentication with these credentials
-                Toast.makeText(this, "Login attempted with " + username, 
-                             Toast.LENGTH_SHORT).show();
+            .setTitle("RTSP流")
+            .setMessage("检测到RTSP流地址：\n" + rtspUrl + "\n\nRTSP流需要使用专用播放器播放。")
+            .setPositiveButton("使用外部播放器", (dialog, which) -> {
+                try {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    intent.setDataAndType(android.net.Uri.parse(rtspUrl), "video/*");
+                    startActivity(intent);
+                } catch (Exception e) {
+                    Toast.makeText(this, "未找到支持RTSP的播放器应用", Toast.LENGTH_SHORT).show();
+                }
             })
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton("取消", null)
             .show();
+    }
+    
+    private void takeSnapshot() {
+        if (selectedCamera == null || !selectedCamera.isAccessible()) {
+            Toast.makeText(this, "无法访问摄像头", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        Toast.makeText(this, "正在获取快照...", Toast.LENGTH_SHORT).show();
+        
+        new Thread(() -> {
+            boolean success = cameraController.sendCameraCommand(selectedCamera, "snapshot");
+            
+            runOnUiThread(() -> {
+                if (success) {
+                    Toast.makeText(this, "快照已保存", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, "获取快照失败", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }).start();
     }
 }
