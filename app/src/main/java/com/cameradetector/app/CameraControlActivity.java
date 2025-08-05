@@ -163,12 +163,12 @@ public class CameraControlActivity extends AppCompatActivity {
     }
     
     private void connectToCamera() {
-        String username = etUsername.getText().toString();
-        String password = etPassword.getText().toString();
+        final String username = etUsername.getText().toString();
+        final String password = etPassword.getText().toString();
         
         // 如果用户名密码为空，使用默认值
-        if (username.isEmpty()) username = "admin";
-        if (password.isEmpty()) password = "admin";
+        final String finalUsername = username.isEmpty() ? "admin" : username;
+        final String finalPassword = password.isEmpty() ? "admin" : password;
         
         progressLoading.setVisibility(View.VISIBLE);
         
@@ -176,8 +176,8 @@ public class CameraControlActivity extends AppCompatActivity {
             // 尝试连接网络摄像头
             new Thread(() -> {
                 // 设置凭据
-                selectedCamera.setUsername(username);
-                selectedCamera.setPassword(password);
+                selectedCamera.setUsername(finalUsername);
+                selectedCamera.setPassword(finalPassword);
                 
                 // 尝试获取流地址
                 String detectedStreamUrl = detectStreamUrl(selectedCamera);
