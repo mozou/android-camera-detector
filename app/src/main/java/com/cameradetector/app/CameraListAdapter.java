@@ -1,12 +1,14 @@
 package com.cameradetector.app;
 
 import android.content.Context;
+import android.content.Intent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -16,13 +18,11 @@ public class CameraListAdapter extends BaseAdapter {
     
     private Context context;
     private List<CameraInfo> cameraList;
-    private LayoutInflater inflater;
     private CameraExploiter cameraExploiter;
     
     public CameraListAdapter(Context context, List<CameraInfo> cameraList) {
         this.context = context;
         this.cameraList = cameraList;
-        this.inflater = LayoutInflater.from(context);
         this.cameraExploiter = new CameraExploiter();
     }
     
@@ -44,6 +44,7 @@ public class CameraListAdapter extends BaseAdapter {
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         ViewHolder holder;
+        LayoutInflater inflater = LayoutInflater.from(context);
         
         if (convertView == null) {
             convertView = inflater.inflate(R.layout.item_camera, parent, false);
@@ -53,9 +54,8 @@ public class CameraListAdapter extends BaseAdapter {
             holder.tvCameraType = convertView.findViewById(R.id.tv_camera_type);
             holder.tvCameraStatus = convertView.findViewById(R.id.tv_camera_status);
             holder.tvCameraId = convertView.findViewById(R.id.tv_camera_id);
-            holder.tvCameraDetails = convertView.findViewById(R.id.tv_camera_details);
             holder.btnExploit = convertView.findViewById(R.id.btn_exploit);
-            holder.btnViewStream = convertView.findViewById(R.id.btn_view_stream);
+            holder.btnView = convertView.findViewById(R.id.btn_view);
             holder.btnControl = convertView.findViewById(R.id.btn_control);
             holder.layoutCameraDetails = convertView.findViewById(R.id.layout_camera_details);
             convertView.setTag(holder);
@@ -63,29 +63,20 @@ public class CameraListAdapter extends BaseAdapter {
             holder = (ViewHolder) convertView.getTag();
         }
         
-        // 设置点击事件，展开/折叠详细信息
-        convertView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (holder.layoutCameraDetails.getVisibility() == View.VISIBLE) {
-                    holder.layoutCameraDetails.setVisibility(View.GONE);
-                } else {
-                    holder.layoutCameraDetails.setVisibility(View.VISIBLE);
-                }
-            }
-        });
-        
         CameraInfo camera = cameraList.get(position);
         
         // 设置摄像头图标
         switch (camera.getType()) {
+            case LOCAL:
+                holder.ivCameraIcon.setImageResource(R.drawable.ic_camera_network);
+                break;
             case NETWORK:
                 // 根据制造商设置不同的图标
                 if (camera.getManufacturer() != null) {
                     String manufacturer = camera.getManufacturer().toLowerCase();
-                    if (manufacturer.contains("hikvision")) {
+                    if (manufacturer.contains("hikvision") || manufacturer.contains("海康")) {
                         holder.ivCameraIcon.setImageResource(R.drawable.ic_camera_hikvision);
-                    } else if (manufacturer.contains("dahua")) {
+                    } else if (manufacturer.contains("dahua") || manufacturer.contains("大华")) {
                         holder.ivCameraIcon.setImageResource(R.drawable.ic_camera_dahua);
                     } else if (manufacturer.contains("axis")) {
                         holder.ivCameraIcon.setImageResource(R.drawable.ic_camera_axis);
@@ -104,54 +95,23 @@ public class CameraListAdapter extends BaseAdapter {
                 break;
         }
         
-        // 设置摄像头基本信息
+        // 设置摄像头信息
         holder.tvCameraName.setText(camera.getName());
         holder.tvCameraType.setText(camera.getTypeString());
         holder.tvCameraStatus.setText(camera.getStatusString());
+        holder.tvCameraId.setText("ID: " + camera.getId());
         
-        // 设置摄像头ID或IP地址
-        if (camera.getType() == CameraInfo.CameraType.NETWORK && camera.getIpAddress() != null) {
-            if (camera.getPort() > 0) {
-                holder.tvCameraId.setText("IP: " + camera.getIpAddress() + ":" + camera.getPort());
-            } else {
-                holder.tvCameraId.setText("IP: " + camera.getIpAddress());
-            }
-        } else {
-            holder.tvCameraId.setText("ID: " + camera.getId());
-        }
-        
-        // 设置详细信息
-        StringBuilder details = new StringBuilder();
-        
-        // 添加制造商信息
-        if (camera.getManufacturer() != null && !camera.getManufacturer().isEmpty()) {
-            details.append("制造商: ").append(camera.getManufacturer()).append("\n");
-        }
-        
-        // 添加型号信息
-        if (camera.getModel() != null && !camera.getModel().isEmpty()) {
-            details.append("型号: ").append(camera.getModel()).append("\n");
-        }
-        
-        // 添加描述信息
-        if (camera.getDescription() != null && !camera.getDescription().isEmpty()) {
-            details.append("\n").append(camera.getDescription());
-        }
-        
-        holder.tvCameraDetails.setText(details.toString());
-        
-        // 根据状态设置标签背景颜色
+        // 根据状态设置文字颜色
         if (camera.isAccessible() && camera.hasPermission()) {
-            holder.tvCameraStatus.setBackgroundResource(R.drawable.bg_tag_status);
+            holder.tvCameraStatus.setTextColor(context.getResources().getColor(android.R.color.holo_green_dark));
         } else if (camera.isAccessible()) {
-            holder.tvCameraStatus.setBackgroundResource(R.drawable.bg_button_secondary);
+            holder.tvCameraStatus.setTextColor(context.getResources().getColor(android.R.color.holo_orange_dark));
         } else {
-            holder.tvCameraStatus.setBackgroundResource(R.drawable.bg_button_danger);
+            holder.tvCameraStatus.setTextColor(context.getResources().getColor(android.R.color.holo_red_dark));
         }
         
-        // 设置按钮可见性和点击事件
+        // 设置漏洞利用按钮
         if (camera.getType() == CameraInfo.CameraType.NETWORK) {
-            // 漏洞利用按钮
             holder.btnExploit.setVisibility(View.VISIBLE);
             holder.btnExploit.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -160,28 +120,36 @@ public class CameraListAdapter extends BaseAdapter {
                 }
             });
             
-            // 查看视频流按钮
-            holder.btnViewStream.setOnClickListener(new View.OnClickListener() {
+            // 设置查看按钮
+            holder.btnView.setVisibility(View.VISIBLE);
+            holder.btnView.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     viewCameraStream(camera);
                 }
             });
             
-            // 控制摄像头按钮
+            // 设置控制按钮
+            holder.btnControl.setVisibility(View.VISIBLE);
             holder.btnControl.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     controlCamera(camera);
                 }
             });
-            
-            // 根据摄像头权限状态设置按钮状态
-            holder.btnViewStream.setEnabled(camera.isAccessible());
-            holder.btnControl.setEnabled(camera.isAccessible() && camera.hasPermission());
         } else {
             holder.btnExploit.setVisibility(View.GONE);
+            holder.btnView.setVisibility(View.GONE);
+            holder.btnControl.setVisibility(View.GONE);
         }
+        
+        // 设置详情区域点击事件
+        holder.layoutCameraDetails.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showCameraDetails(camera);
+            }
+        });
         
         return convertView;
     }
@@ -247,27 +215,16 @@ public class CameraListAdapter extends BaseAdapter {
      * 查看摄像头视频流
      */
     private void viewCameraStream(CameraInfo camera) {
-        if (camera.getType() != CameraInfo.CameraType.NETWORK || !camera.isAccessible()) {
-            Toast.makeText(context, "无法访问该摄像头的视频流", Toast.LENGTH_SHORT).show();
+        if (!camera.isAccessible()) {
+            Toast.makeText(context, "摄像头不可访问", Toast.LENGTH_SHORT).show();
             return;
         }
         
-        // 构建可能的视频流URL
-        String streamUrl = null;
-        
-        // 尝试RTSP流
-        if (camera.getPort() == 554) {
-            streamUrl = "rtsp://" + camera.getIpAddress() + ":554/live/main";
-        } 
-        // 尝试HTTP流
-        else {
-            streamUrl = "http://" + camera.getIpAddress() + ":" + camera.getPort() + "/video";
-        }
-        
-        // 启动视频流查看活动
+        // 启动摄像头控制活动，仅查看模式
         Intent intent = new Intent(context, CameraControlActivity.class);
         intent.putExtra("camera_info", camera);
-        intent.putExtra("stream_url", streamUrl);
+        intent.putExtra("stream_url", camera.getFullStreamUrl());
+        intent.putExtra("control_mode", false);
         context.startActivity(intent);
     }
     
@@ -275,16 +232,50 @@ public class CameraListAdapter extends BaseAdapter {
      * 控制摄像头
      */
     private void controlCamera(CameraInfo camera) {
-        if (!camera.isAccessible() || !camera.hasPermission()) {
-            Toast.makeText(context, "无权限控制该摄像头", Toast.LENGTH_SHORT).show();
+        if (!camera.isAccessible()) {
+            Toast.makeText(context, "摄像头不可访问", Toast.LENGTH_SHORT).show();
             return;
         }
         
-        // 启动摄像头控制活动
+        // 启动摄像头控制活动，控制模式
         Intent intent = new Intent(context, CameraControlActivity.class);
         intent.putExtra("camera_info", camera);
+        intent.putExtra("stream_url", camera.getFullStreamUrl());
         intent.putExtra("control_mode", true);
         context.startActivity(intent);
+    }
+    
+    /**
+     * 显示摄像头详细信息
+     */
+    private void showCameraDetails(CameraInfo camera) {
+        StringBuilder details = new StringBuilder();
+        details.append("名称: ").append(camera.getName()).append("\n");
+        details.append("类型: ").append(camera.getTypeString()).append("\n");
+        details.append("状态: ").append(camera.getStatusString()).append("\n");
+        
+        if (camera.getType() == CameraInfo.CameraType.NETWORK) {
+            details.append("IP地址: ").append(camera.getIpAddress()).append("\n");
+            details.append("端口: ").append(camera.getPort()).append("\n");
+            
+            if (camera.getManufacturer() != null && !camera.getManufacturer().isEmpty()) {
+                details.append("制造商: ").append(camera.getManufacturer()).append("\n");
+            }
+            
+            if (camera.getModel() != null && !camera.getModel().isEmpty()) {
+                details.append("型号: ").append(camera.getModel()).append("\n");
+            }
+            
+            if (camera.getMacAddress() != null && !camera.getMacAddress().isEmpty()) {
+                details.append("MAC地址: ").append(camera.getMacAddress()).append("\n");
+            }
+        }
+        
+        new androidx.appcompat.app.AlertDialog.Builder(context)
+            .setTitle("摄像头详情")
+            .setMessage(details.toString())
+            .setPositiveButton("确定", null)
+            .show();
     }
     
     private static class ViewHolder {
@@ -293,9 +284,8 @@ public class CameraListAdapter extends BaseAdapter {
         TextView tvCameraType;
         TextView tvCameraStatus;
         TextView tvCameraId;
-        TextView tvCameraDetails;
         Button btnExploit;
-        Button btnViewStream;
+        Button btnView;
         Button btnControl;
         LinearLayout layoutCameraDetails;
     }

@@ -5,6 +5,10 @@ import android.os.Parcelable;
 
 public class CameraInfo implements Parcelable {
     
+    private String username;
+    private String password;
+    private String streamPath;
+    
     public enum CameraType {
         LOCAL,      // 本地摄像头
         NETWORK,    // 网络摄像头
@@ -38,6 +42,9 @@ public class CameraInfo implements Parcelable {
         manufacturer = in.readString();
         model = in.readString();
         description = in.readString();
+        username = in.readString();
+        password = in.readString();
+        streamPath = in.readString();
     }
     
     public static final Creator<CameraInfo> CREATOR = new Creator<CameraInfo>() {
@@ -69,6 +76,9 @@ public class CameraInfo implements Parcelable {
         dest.writeString(manufacturer);
         dest.writeString(model);
         dest.writeString(description);
+        dest.writeString(username);
+        dest.writeString(password);
+        dest.writeString(streamPath);
     }
     
     // Getters and Setters
@@ -101,6 +111,15 @@ public class CameraInfo implements Parcelable {
     
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+    
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+    
+    public String getStreamPath() { return streamPath; }
+    public void setStreamPath(String streamPath) { this.streamPath = streamPath; }
     
     public String getTypeString() {
         switch (type) {

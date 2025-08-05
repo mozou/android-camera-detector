@@ -19,9 +19,65 @@ import java.util.Set;
 
 public class CameraController {
     
+    private static final String TAG = "CameraController";
     private Context context;
     private CameraManager cameraManager;
     private BluetoothAdapter bluetoothAdapter;
+    
+    // 常见摄像头控制命令映射
+    private static final java.util.Map<String, java.util.Map<String, String>> CAMERA_CONTROL_COMMANDS = new java.util.HashMap<String, java.util.Map<String, String>>() {{
+        // 海康威视摄像头控制命令
+        put("hikvision", new java.util.HashMap<String, String>() {{
+            put("ptz_left", "/ISAPI/PTZCtrl/channels/1/continuous?direction=left&speed=25");
+            put("ptz_right", "/ISAPI/PTZCtrl/channels/1/continuous?direction=right&speed=25");
+            put("ptz_up", "/ISAPI/PTZCtrl/channels/1/continuous?direction=up&speed=25");
+            put("ptz_down", "/ISAPI/PTZCtrl/channels/1/continuous?direction=down&speed=25");
+            put("ptz_stop", "/ISAPI/PTZCtrl/channels/1/continuous?direction=stop");
+            put("zoom_in", "/ISAPI/PTZCtrl/channels/1/continuous?zoom=1");
+            put("zoom_out", "/ISAPI/PTZCtrl/channels/1/continuous?zoom=-1");
+            put("snapshot", "/ISAPI/Streaming/channels/1/picture");
+            put("reboot", "/ISAPI/System/reboot");
+        }});
+        
+        // 大华摄像头控制命令
+        put("dahua", new java.util.HashMap<String, String>() {{
+            put("ptz_left", "/cgi-bin/ptz.cgi?action=start&channel=1&code=Left&arg1=0&arg2=1");
+            put("ptz_right", "/cgi-bin/ptz.cgi?action=start&channel=1&code=Right&arg1=0&arg2=1");
+            put("ptz_up", "/cgi-bin/ptz.cgi?action=start&channel=1&code=Up&arg1=0&arg2=1");
+            put("ptz_down", "/cgi-bin/ptz.cgi?action=start&channel=1&code=Down&arg1=0&arg2=1");
+            put("ptz_stop", "/cgi-bin/ptz.cgi?action=stop&channel=1&code=All");
+            put("zoom_in", "/cgi-bin/ptz.cgi?action=start&channel=1&code=ZoomTele&arg1=0&arg2=1");
+            put("zoom_out", "/cgi-bin/ptz.cgi?action=start&channel=1&code=ZoomWide&arg1=0&arg2=1");
+            put("snapshot", "/cgi-bin/snapshot.cgi?channel=1");
+            put("reboot", "/cgi-bin/magicBox.cgi?action=reboot");
+        }});
+        
+        // 通用ONVIF摄像头控制命令
+        put("onvif", new java.util.HashMap<String, String>() {{
+            put("ptz_left", "/onvif/PTZ?pan=-50&tilt=0&zoom=0");
+            put("ptz_right", "/onvif/PTZ?pan=50&tilt=0&zoom=0");
+            put("ptz_up", "/onvif/PTZ?pan=0&tilt=50&zoom=0");
+            put("ptz_down", "/onvif/PTZ?pan=0&tilt=-50&zoom=0");
+            put("ptz_stop", "/onvif/PTZ?pan=0&tilt=0&zoom=0");
+            put("zoom_in", "/onvif/PTZ?pan=0&tilt=0&zoom=50");
+            put("zoom_out", "/onvif/PTZ?pan=0&tilt=0&zoom=-50");
+            put("snapshot", "/onvif/Snapshot");
+            put("reboot", "/onvif/Device/Reboot");
+        }});
+        
+        // 通用摄像头控制命令
+        put("generic", new java.util.HashMap<String, String>() {{
+            put("ptz_left", "/cgi-bin/ptz.cgi?move=left");
+            put("ptz_right", "/cgi-bin/ptz.cgi?move=right");
+            put("ptz_up", "/cgi-bin/ptz.cgi?move=up");
+            put("ptz_down", "/cgi-bin/ptz.cgi?move=down");
+            put("ptz_stop", "/cgi-bin/ptz.cgi?move=stop");
+            put("zoom_in", "/cgi-bin/ptz.cgi?zoom=tele");
+            put("zoom_out", "/cgi-bin/ptz.cgi?zoom=wide");
+            put("snapshot", "/cgi-bin/snapshot.cgi");
+            put("reboot", "/cgi-bin/reboot.cgi");
+        }});
+    }};
     
     public CameraController(Context context) {
         this.context = context;
@@ -418,5 +474,96 @@ public class CameraController {
         intent.setData(uri);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(intent);
+    }
+    
+    /**
+     * 发送摄像头控制命令
+     * @param camera 摄像头信息
+     * @param command 命令类型，如 ptz_left, ptz_right, zoom_in 等
+     * @return 是否发送成功
+     */
+    public boolean sendCameraCommand(CameraInfo camera, String command) {
+        if (camera == null || camera.getType() != CameraInfo.CameraType.NETWORK || 
+            camera.getIpAddress() == null || camera.getIpAddress().isEmpty()) {
+            Log.e(TAG, "无效的摄像头信息或非网络摄像头");
+            return false;
+        }
+        
+        // 获取摄像头品牌
+        String brand = detectCameraBrand(camera);
+        
+        // 获取对应品牌的命令映射
+        java.util.Map<String, String> commands = CAMERA_CONTROL_COMMANDS.get(brand);
+        if (commands == null) {
+            commands = CAMERA_CONTROL_COMMANDS.get("generic");
+        }
+        
+        // 获取具体命令路径
+        String commandPath = commands.get(command);
+        if (commandPath == null) {
+            Log.e(TAG, "未找到命令: " + command);
+            return false;
+        }
+        
+        try {
+            // 构建完整URL
+            String urlString = "http://" + camera.getIpAddress() + ":" + camera.getPort() + commandPath;
+            URL url = new URL(urlString);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            
+            // 如果有用户名和密码，添加认证头
+            if (camera.getUsername() != null && !camera.getUsername().isEmpty()) {
+                String auth = camera.getUsername() + ":" + camera.getPassword();
+                String encodedAuth = android.util.Base64.encodeToString(auth.getBytes(), android.util.Base64.NO_WRAP);
+                connection.setRequestProperty("Authorization", "Basic " + encodedAuth);
+            }
+            
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            
+            int responseCode = connection.getResponseCode();
+            connection.disconnect();
+            
+            Log.d(TAG, "命令 " + command + " 发送结果: " + responseCode);
+            return responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_ACCEPTED;
+            
+        } catch (IOException e) {
+            Log.e(TAG, "发送摄像头命令失败: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * 检测摄像头品牌
+     */
+    private String detectCameraBrand(CameraInfo camera) {
+        if (camera.getManufacturer() != null && !camera.getManufacturer().isEmpty()) {
+            String manufacturer = camera.getManufacturer().toLowerCase();
+            
+            if (manufacturer.contains("hikvision") || manufacturer.contains("海康")) {
+                return "hikvision";
+            } else if (manufacturer.contains("dahua") || manufacturer.contains("大华")) {
+                return "dahua";
+            } else if (manufacturer.contains("axis")) {
+                return "onvif";
+            }
+        }
+        
+        // 尝试从名称和描述中判断
+        String name = camera.getName() != null ? camera.getName().toLowerCase() : "";
+        String description = camera.getDescription() != null ? camera.getDescription().toLowerCase() : "";
+        
+        if (name.contains("hikvision") || name.contains("海康") || 
+            description.contains("hikvision") || description.contains("海康")) {
+            return "hikvision";
+        } else if (name.contains("dahua") || name.contains("大华") || 
+                  description.contains("dahua") || description.contains("大华")) {
+            return "dahua";
+        } else if (name.contains("axis") || description.contains("axis") || 
+                  name.contains("onvif") || description.contains("onvif")) {
+            return "onvif";
+        }
+        
+        return "generic";
     }
 }
