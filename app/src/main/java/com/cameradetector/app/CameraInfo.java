@@ -121,6 +121,30 @@ public class CameraInfo implements Parcelable {
     public String getStreamPath() { return streamPath; }
     public void setStreamPath(String streamPath) { this.streamPath = streamPath; }
     
+    // 获取完整的流URL
+    public String getFullStreamUrl() {
+        if (streamPath != null && !streamPath.isEmpty()) {
+            if (streamPath.startsWith("rtsp://") || streamPath.startsWith("http://")) {
+                return streamPath;
+            } else if (ipAddress != null && !ipAddress.isEmpty() && port > 0) {
+                return "rtsp://" + ipAddress + ":" + port + streamPath;
+            }
+        }
+        
+        // 尝试构建默认的RTSP URL
+        if (ipAddress != null && !ipAddress.isEmpty() && port > 0) {
+            return "rtsp://" + ipAddress + ":" + port + "/";
+        }
+        
+        return null;
+    }
+    
+    // 获取MAC地址
+    private String macAddress;
+    
+    public String getMacAddress() { return macAddress; }
+    public void setMacAddress(String macAddress) { this.macAddress = macAddress; }
+    
     public String getTypeString() {
         switch (type) {
             case LOCAL:
